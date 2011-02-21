@@ -1,0 +1,37 @@
+					README 
+					------
+			
+				gET iT i sAY. giis for ext4 (giis-ext4)
+				=======================================
+				   version.0.5
+	
+*About giis
+*How to install
+*User Guide and Documents
+
+
+About giis:
+==========
+gET iT i sAY.giis is a text based file recovery tool.Once you install giis,files on your disk can be recovered using giis.
+But Those files which deleted before the installation giis can't be recovered using giis.User has the option to choose directories too.
+Add only those directories where you will store important data.(adding directories like /tmp gives giis overhead and installation 
+will take long time).It can recovers a deleted file and restores in it's original directory,if path exists.It recovers dropped 
+database tables.
+
+
+Note : giis is an admin tool.So the user should have root user rights to execute it.
+
+How to install:
+============== 
+see INSTALL file
+
+User Guide and Documents
+========================
+For more screencasting/manuals,checkout  www.giis.co.in
+
+You can get me at  <lakshmipathi.g@gmail.com> or <lakshmipathi@gluster.com> 
+
+-Lakshmipathi.G
+www.giis.co.in
+-Jan 30,2010.
+==================================EOF==================================

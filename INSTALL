@@ -1,0 +1,93 @@
+Introduction
+=============
+giis-ext4 is designed to protect certain important directories/files on linux systems that 
+are using the ext4 filesystem.
+
+Dependencies
+=============
+The binary installation of giis-ext4 has only one dependency. This is:
+	sqlite3
+
+	Using Ubuntu this can be installed by running the command
+		sudo apt-get install sqlite3
+
+	Using Fedora this can be installed by running the command
+		sudo yum install sqlite
+
+The source installation of giis-ext4 also has very few dependencies. These are:
+	pkg-config
+	sqlite3
+	libsqlite3-dev
+	e2fslibs-dev
+	
+	Using Ubuntu these can be installed by running the command
+		sudo apt-get install sqlite3 libsqlite3-dev e2fslibs-dev pkg-config
+
+	Using Fedora this can be installed by running the command
+		sudo yum install sqlite sqlite-devel pkgconfig e2fsprogs-devel e2fsprogs-libs
+
+Installation general
+=====================
+Installation of giis-ext4 will need root privileges. You should follow these
+steps for both binary and source installation.
+
+Download the tar file into your home directory
+	wget http://www.giis.co.in/giis/giis-ext4.tar
+
+Extract the tar file into your home directory, which will create  a new 
+directory called giis-ext4
+	tar -xvf giis-ext4.tar
+
+Change to the newly created directory
+	cd giis-ext4
+
+
+Installation of binary
+=======================
+These instructions follow on from Installation General. To install giis-ext4 
+binary, run the following commands:
+
+Ubuntu
+	sudo sh install_giis_ext4.sh
+
+Fedora
+	su -
+	sh install_giis_ext4.sh
+
+This script will place the binary in /usr/bin and create the /usr/local/giis/
+working directory structure and files.
+	 
+Installation from source
+=========================
+These instructions follow on from Installation General. To compile and install 
+giis-ext4 from the source code, run the following commmands:
+
+Method:1
+========
+cd src
+
+Ubuntu
+	sudo gcc `pkg-config --libs ext2fs sqlite3` giis-ext4.c -o giis-ext4 && mv giis-ext4 /usr/bin/
+	
+Fedora
+	su
+	gcc `pkg-config --libs ext2fs sqlite3` giis-ext4.c -o giis-ext4 && mv giis-ext4 /usr/bin/
+
+Method:2
+=======
+	make
+	mv giis-ext4 /usr/bin
+
+This will compile giis-ext4 and move the newly created binary into /usr/bin/
+
+giis-ext4 configuration
+========================
+Once you have succuessfully installed giis-ext4 from either the binary or source
+code, you need to configure it.
+
+Run the following command as root to configure which directories to protect, how
+many levels of directory and how often to look for changes.
+
+	giis-ext4 --install
+
+Running giis-ext4 --help will give you more details.
