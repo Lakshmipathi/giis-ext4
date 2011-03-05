@@ -1,4 +1,4 @@
-Things TODO for giis-ext4 0.6 : (for next version)
+Things TODO for giis-ext4 0.7 : (for next version)
 
 set correct file size instead of multiple of block_size
 collect sample data
