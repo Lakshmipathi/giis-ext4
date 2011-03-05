@@ -92,13 +92,14 @@ struct arguments
 static struct argp_option options[] =
 {  
   {"install",   'i', 0, 0,"Will start the installation process."},
-  {"update",   'u', 0, 0,"update to reflect current File system state"},
-  {"recover", 'g', 0, 0, "undelete/recover files"},
+  {"update",   'u', 0, 0,"Update to reflect current File system state"},
+  {"recover", 'g', 0, 0, "Undelete/recover files"},
   {"uninstall",'q',0,0,"Uninstalls giis-ext4"},
+  {"list",'l',0,0,"List deleted files"},
   {0}
 };
 
-
+int just_list;//display files
 int max_dir_depth; //will be set from giis header
 int update_time,update;
 sqlite3 *conn;
@@ -114,6 +115,7 @@ const char *argp_program_bug_address = "<http://groups.google.com/group/giis-use
 static error_t parse_opt (int, char *, struct argp_state *); 
 int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys);
 int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *,ext2_filsys);
+int giis_ext4_list_file_detials(struct giis_recovered_file_info *,ext2_filsys);
 int giis_ext4_sqlite_insert_record(struct linux_dirent *,struct ext2_inode *,unsigned long,int,char []);
 int giis_ext4_recover_all(ext2_filsys ,int );
 int giis_ext4_write_into_file(struct giis_recovered_file_info *,unsigned char []);
@@ -152,6 +154,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     case 'q':
       arguments->flag=4;
       break;
+    case 'l':
+      arguments->flag=5;
+      break;
     default:
       return ARGP_ERR_UNKNOWN;
     }
@@ -170,7 +175,7 @@ int i=0;
 int ans=0;
 struct arguments arguments;
 argp_parse (&argp, argc, argv, 0, 0, &arguments);
-if ( !(arguments.flag>0 && arguments.flag<5))
+if ( !(arguments.flag>0 && arguments.flag<6))
   handle_error("For usage type : giis-ext4 --help");
 
 if(arguments.flag==4){
@@ -192,7 +197,7 @@ if (retval) {
 
 EXT2_BLOCK_SIZE=current_fs->blocksize;
 
-if(arguments.flag==1){
+if(arguments.flag == 1){
 printf("\n giis : Taking snapshot of current File system \n");
 update=FALSE;
 giis_ext4_creat_tables(device);
@@ -201,13 +206,13 @@ giis_ext4_update_dirs(current_fs);
 printf("\n *Please add following entry into your /etc/crontab file for auto update");
 printf("\n */%d * * * * root /usr/bin/giis-ext4 -u > /dev/null ",update_time);
 printf("\n giis-ext4:Installation is complete.\n"); 
-}else if (arguments.flag==2){
+}else if (arguments.flag == 2){
 printf("\n giis : Updating snapshot of current File system \n");
 open_db();
 update=TRUE;
 giis_ext4_update_dirs(current_fs);
 printf("\n giis-ext4:Update is complete.\n"); 
-}else if (arguments.flag ==3){
+}else if (arguments.flag == 3){
 printf("\n press 1: get all user files");printf("\n press 2: get specific user files");
 printf("\n press 3: get specific file type");printf("\n press 4: get specific file");
 printf("\n press 5: get it by deleted date");printf("\n Enter your option:");
@@ -216,6 +221,9 @@ scanf("%d",&ans);
 giis_ext4_recover_all(current_fs,ans);
 printf("\n\n **giis-ext4 : Recovery completed.Please check %s for more details and %s for files **\n",GIIS_LOG_FILE,RESTORE_DIR);
 exit(0);
+}else if (arguments.flag == 5){
+just_list=1;
+giis_ext4_recover_all(current_fs,1);
 }
 ext2fs_close(current_fs);
 return 1;
@@ -490,6 +498,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 			fi->fname=sqlite3_column_text(res, 0);
 
 			fi->inode_num=sqlite3_column_int64(res, 1);
+			if(!just_list)
 			printf("%lu|",fi->inode_num);
 
 			fi->extents[0]=sqlite3_column_int(res, 2);
@@ -519,11 +528,17 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 			if (in->i_links_count ==0 ){
 				if(date_mode !=-1){
 				if((giis_ext4_check_ddate(in)==1) && (fi->starting_block[0])){
-				giis_ext4_dump_data_blocks(fi,current_fs);
+					if(!just_list)
+					giis_ext4_dump_data_blocks(fi,current_fs);
+					else
+					giis_ext4_list_file_details(fi,current_fs);
 				}
 				}else{//Not date mode
 				if(fi->starting_block[0])
-				giis_ext4_dump_data_blocks(fi,current_fs);
+					if(!just_list)
+					giis_ext4_dump_data_blocks(fi,current_fs);
+					else
+					giis_ext4_list_file_details(fi,current_fs);
 				}
 			} 
 
@@ -943,7 +958,9 @@ int retval=0;
 
    printf("\n giis-ext4: cleaned up - Please remove giis-ext4 related entry from crontab file\n");
    printf("\n Don't forgot to take backups!! Good luck :)\n\n ");
-
-
 }
   
+int giis_ext4_list_file_details(struct giis_recovered_file_info *fi,ext2_filsys current_fs){
+	printf("\nFile:%s was deleted from %s.\n",fi->fname,fi->fpath);
+	return 1;
+}
