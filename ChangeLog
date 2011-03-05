@@ -1,3 +1,8 @@
+2011-03-05 Lakshmipathi.G<lakshmipathi.g@gmail.com>
+       * Release of giis-ext4 0.6
+			- Added --list option to show deleted files and its
+			location.
+..............................................................................
 2011-01-30 Lakshmipathi.G<lakshmipathi.g@gmail.com>
        * Release of giis-ext4 0.5
 			- Another Crazy bug -removed O_TRUNC - now should
