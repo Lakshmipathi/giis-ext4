@@ -370,7 +370,8 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		strcpy(file_location,fi->fpath);
 		}
 		giis_ext4_log_mesg(file_location);
-
+		//set correct file-size
+		truncate(file_location,fi->fsize);	
 return 1;
 }
 
