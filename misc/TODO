@@ -1,7 +1,8 @@
 Things TODO for giis-ext4 0.7 : (for next version)
 
 set correct file size instead of multiple of block_size
-collect sample data
+collect sample data or use md5sum  to check file integrity
 auto config tool
 GUI
 File deleted  with same name from two different directories.
+add lock - so that there won't be two instance of giis operates on db simultaneously.
