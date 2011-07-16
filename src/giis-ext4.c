@@ -108,7 +108,7 @@ int EXT2_BLOCK_SIZE;
 int date_mode=-1,day,month,year,day1,month1,year1;
 int is_file_already_exists;
 char cwd[40];
-const char *argp_program_version = "giis-ext4 0.6 (05-Mar-2011) ";
+const char *argp_program_version = "giis-ext4 0.7 (17-Jul-2011) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
 
