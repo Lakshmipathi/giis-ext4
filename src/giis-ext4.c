@@ -127,7 +127,8 @@ int giis_ext4_check_ddate(struct ext2_inode *);
 int giis_ext4_creat_tables(char *);
 int giis_ext4_update_dirs(ext2_filsys );
 unsigned long getinodenumber(char *);
-void open_db();
+void giis_ext4_open_db();
+void giis_ext4_close_db();
 int giis_ext4_sqlite_verify_record(unsigned long);
 int giis_ext4_uninstall(void);
 
@@ -209,7 +210,7 @@ printf("\n */%d * * * * root /usr/bin/giis-ext4 -u > /dev/null ",update_time);
 printf("\n giis-ext4:Installation is complete.\n"); 
 }else if (arguments.flag == 2){
 printf("\n giis : Updating snapshot of current File system \n");
-open_db();
+giis_ext4_open_db();
 update=TRUE;
 giis_ext4_update_dirs(current_fs);
 printf("\n giis-ext4:Update is complete.\n"); 
@@ -465,7 +466,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 		in=&inode;
 
 		//get the connection
-		open_db();
+		giis_ext4_open_db();
 		if (option == 5){//get by deleted date
 		giis_ext4_get_date();
 		option =1 ; //and start recovery all
@@ -568,7 +569,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 
 		error = sqlite3_reset(res);assert(error == SQLITE_OK);
 		sqlite3_finalize(res);
-		sqlite3_close(conn);
+		giis_ext4_close_db();
 
 }
 int giis_ext4_write_into_file(struct giis_recovered_file_info *fi,unsigned char buf[EXT2_BLOCK_SIZE]){
@@ -761,7 +762,7 @@ int giis_ext4_creat_tables(char *device){
 		 handle_error ("\n creat: logpath failed");
 
 		//get connection
-		open_db();
+		giis_ext4_open_db();
 		printf("\n giis-ext4:Installation begins..");
 		//Creat giisheader table
 		error = sqlite3_exec(conn,SQL_STMT_CREATE_HEADER,0,0,0);
@@ -884,13 +885,7 @@ int giis_ext4_update_dirs(ext2_filsys current_fs){
 	}
 
 				sqlite3_finalize(res);
-				
-				close2:
-				while(sqlite3_close(conn)==SQLITE_BUSY){
-				printf("\n Db not closed");
-				sleep(5);
-				goto close2;
-				}
+				giis_ext4_close_db();
 
 }
 
@@ -903,7 +898,18 @@ unsigned long getinodenumber(char *path){
 	    return parent;
 }
 
-void open_db(){
+void giis_ext4_close_db(){
+extern sqlite3 *conn;
+
+	close2:
+	while(sqlite3_close(conn)==SQLITE_BUSY){
+	printf("\n Db not closed");
+	sleep(5);
+	goto close2;
+	}
+		
+}
+void giis_ext4_open_db(){
 extern sqlite3 *conn;
 int     error = 0;
 char *dbfile=SQLITE_DB_LOCATION;
