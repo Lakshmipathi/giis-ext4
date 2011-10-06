@@ -107,6 +107,7 @@ sqlite3 *conn;
 int EXT2_BLOCK_SIZE;
 int date_mode=-1,day,month,year,day1,month1,year1;
 int is_file_already_exists;
+int dp;
 char cwd[40];
 const char *argp_program_version = "giis-ext4 0.7 (17-Jul-2011) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
@@ -131,6 +132,8 @@ void giis_ext4_open_db();
 void giis_ext4_close_db();
 int giis_ext4_sqlite_verify_record(unsigned long);
 int giis_ext4_uninstall(void);
+static int giis_ext4_unlock_db(int fd ,int offset,int len);
+static int giis_ext4_lock_db(int fd ,int offset,int len);
 
 
 static char args_doc[] = "";
@@ -210,8 +213,8 @@ printf("\n */%d * * * * root /usr/bin/giis-ext4 -u > /dev/null ",update_time);
 printf("\n giis-ext4:Installation is complete.\n"); 
 }else if (arguments.flag == 2){
 printf("\n giis : Updating snapshot of current File system \n");
-giis_ext4_open_db();
 update=TRUE;
+giis_ext4_open_db();
 giis_ext4_update_dirs(current_fs);
 printf("\n giis-ext4:Update is complete.\n"); 
 }else if (arguments.flag == 3){
@@ -908,11 +911,57 @@ extern sqlite3 *conn;
 	goto close2;
 	}
 		
+	if(update==TRUE){
+		if (giis_ext4_unlock_db(dp,0,0) !=0)
+		printf("unlock failed");
+	}
 }
+
+static int giis_ext4_lock_db(int fd,int offset,int len){
+struct flock lock;
+lock.l_type=F_WRLCK;
+lock.l_whence=SEEK_SET;
+lock.l_start=offset,
+lock.l_len=len;
+lock.l_pid=0;
+return fcntl(fd,F_SETLKW,&lock);
+}
+static int giis_ext4_unlock_db(int fd,int offset,int len){
+struct flock lock;
+lock.l_type=F_UNLCK;
+lock.l_whence=SEEK_SET;
+lock.l_start=offset,
+lock.l_len=len;
+lock.l_pid=0;
+return fcntl(fd,F_SETLKW,&lock);
+}
+
+static int giis_ext4_get_lock(int fd,int offset,int len){
+struct flock lock;
+lock.l_type=F_RDLCK;
+lock.l_whence=SEEK_SET;
+lock.l_start=offset,
+lock.l_len=len;
+lock.l_pid=0;
+return fcntl(fd,F_GETLK,&lock);
+}
+
 void giis_ext4_open_db(){
 extern sqlite3 *conn;
 int     error = 0;
 char *dbfile=SQLITE_DB_LOCATION;
+extern int dp;
+	
+	if(update==TRUE){
+		dp=open(dbfile,O_RDWR);
+
+		if (giis_ext4_lock_db(dp,0,0) !=0){
+		printf("lock failed");
+		giis_ext4_get_lock(dp,0,1);
+		}
+	}
+	
+
 
 	error = sqlite3_open(dbfile, &conn);
 	assert(error == SQLITE_OK);

@@ -1,3 +1,8 @@
+..............................................................................
+2011-08-05 Lakshmipathi.G<lakshmipathi.g@gmail.com>
+       * Release of giis-ext4 0.8
+			- Lock the db before making changes to it.
+..............................................................................
 2011-07-17 Lakshmipathi.G<lakshmipathi.g@gmail.com>
        * Release of giis-ext4 0.7
 			- Added --md5sum for each file.
