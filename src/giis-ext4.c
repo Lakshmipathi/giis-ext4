@@ -117,7 +117,7 @@ const char *argp_program_bug_address = "<http://groups.google.com/group/giis-use
 static error_t parse_opt (int, char *, struct argp_state *); 
 int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys);
 int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *,ext2_filsys);
-int giis_ext4_list_file_detials(struct giis_recovered_file_info *,ext2_filsys);
+int giis_ext4_list_file_details(struct giis_recovered_file_info *,ext2_filsys);
 int giis_ext4_sqlite_insert_record(struct linux_dirent *,struct ext2_inode *,unsigned long,int,char []);
 int giis_ext4_recover_all(ext2_filsys ,int );
 int giis_ext4_write_into_file(struct giis_recovered_file_info *,unsigned char []);
