@@ -122,7 +122,7 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *,struct ext2_inode *,uns
 int giis_ext4_recover_all(ext2_filsys ,int );
 int giis_ext4_write_into_file(struct giis_recovered_file_info *,unsigned char []);
 int giis_ext4_search4fs (char *);
-int giis_ext4_log_mesg(char *,char *);
+int giis_ext4_log_mesg(char *,char *,char *);
 int giis_ext4_get_date();
 int giis_ext4_check_ddate(struct ext2_inode *);
 int giis_ext4_creat_tables(char *);
@@ -340,6 +340,8 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 	extern int is_file_already_exists;
 	char file_location[512]={0};
 
+	char md5_cmd[512],md5sum[34];
+	FILE *pf;
 
 		is_file_already_exists=0;
 		if(open (fi->fpath, O_CREAT|O_EXCL, S_IRWXU |S_IRWXG |S_IRWXO) == -1 )
@@ -375,9 +377,27 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		strcpy(file_location,fi->fpath);
 		}
 		
-		giis_ext4_log_mesg(file_location,fi->md5sum);
 		//set correct file-size
 		truncate(file_location,fi->fsize);	
+		//Recompute md5  of recovered file
+		memset(md5_cmd,'\0',512);
+		sprintf(md5_cmd,"md5sum %s",file_location);
+	
+		pf=popen(md5_cmd,"r");
+		if(!pf){
+		fprintf(stderr,"Could not open pipe");
+		return ;
+		}
+	
+		//get data
+        	 fgets(md5sum, 34 , pf);
+                                                  
+	         if (pclose(pf) != 0)
+        	 fprintf(stderr," Error: close Failed.");
+
+		fprintf(stdout,"Md5sum is %s",md5sum);
+
+		giis_ext4_log_mesg(file_location,fi->md5sum,md5sum);
 		
 return 1;
 }
@@ -417,7 +437,7 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 	error = sqlite3_bind_int64(Stmt, 17,inode->i_block[11]);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 18,inode->i_block[13]);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int64(Stmt, 19,inode->i_block[14]);   assert(error == SQLITE_OK);
-	//computer md5 
+	//compute md5 
 	memset(md5_cmd,'\0',512);
 	sprintf(md5_cmd,"md5sum %s",cwd);
 	
@@ -642,20 +662,38 @@ printf("\n Device Found : %s",device);
 return 1;
 }
 /* log file */
-int giis_ext4_log_mesg(char *mesg,char *md5sum){
+int giis_ext4_log_mesg(char *mesg,char *md5sum,char *new_md5sum){
 int fp;
-char *newline=" orig.md5sum -- recovered on -- ";
-//char *newline2=" -- original md5sum -- ";
 struct tm mytm;
 time_t result;
+char line[256];
 result=time(NULL);
 
 fp=open(GIIS_LOG_FILE,O_RDWR |O_CREAT| O_APPEND,S_IRWXU |S_IRWXG |S_IRWXO);
-write(fp,mesg,strlen(mesg));
-write(fp,newline,strlen(newline));
-write(fp,md5sum,34);
-write(fp,ctime(&result),strlen(ctime(&result)));
-//write(fp,newline2,strlen(newline2));
+
+memset(line,'\0',256);
+sprintf(line,"\nFile Name : %s\n",mesg);
+write(fp,line,strlen(line));
+
+memset(line,'\0',256);
+sprintf(line,"Old MD5SUM : %s\n",md5sum);
+write(fp,line,strlen(line));
+
+memset(line,'\0',256);
+sprintf(line,"New MD5SUM : %s\n",new_md5sum);
+write(fp,line,strlen(line));
+
+memset(line,'\0',256);
+if(strcmp(md5sum,new_md5sum)==0)
+sprintf(line,"MD5SUM Match:Yes \n");
+else
+sprintf(line,"MD5SUM Match:No \n");
+write(fp,line,strlen(line));
+
+
+memset(line,'\0',256);
+sprintf(line,"Recovered on :%s\n",ctime(&result));
+write(fp,line,strlen(line));
 
 close(fp);
 return 1;
