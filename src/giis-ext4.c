@@ -109,7 +109,7 @@ int date_mode=-1,day,month,year,day1,month1,year1;
 int is_file_already_exists;
 int dp;
 char cwd[40];
-const char *argp_program_version = "giis-ext4 0.8 (05-Oct-2011) ";
+const char *argp_program_version = "giis-ext4 0.9 (11-11-2011) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
 

@@ -1,4 +1,11 @@
 ..............................................................................
+2011-11-11 Lakshmipathi.G<lakshmipathi.g@giis.co.in>
+       * Release of giis-ext4 0.9
+			- Recompute md5sum of recovered files and compare it
+			with original md5sum and update its status on log
+			file.
+			- More readable log file format
+............................................................................
 2011-08-05 Lakshmipathi.G<lakshmipathi.g@gmail.com>
        * Release of giis-ext4 0.8
 			- Lock the db before making changes to it.
