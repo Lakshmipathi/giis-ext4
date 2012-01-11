@@ -22,9 +22,12 @@
 #include <sqlite3.h>
 #include <assert.h>    /* assert */
 #include <libgen.h>
+#define PORT 1
+
+#ifndef PORT
 /* argp */
 #include <argp.h>
-
+#endif
 
 /* SQL statements used in this program */
 #define SQL_STMT_GET_ALL "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum from giistable "
@@ -90,6 +93,7 @@ struct arguments
 };
 
 
+#ifndef PORT
 static struct argp_option options[] =
 {  
   {"install",   'i', 0, 0,"Will start the installation process."},
@@ -99,6 +103,7 @@ static struct argp_option options[] =
   {"list",'l',0,0,"List deleted files"},
   {0}
 };
+#endif
 
 int just_list;//display files
 int max_dir_depth; //will be set from giis header
@@ -114,7 +119,9 @@ const char *argp_program_bug_address = "<http://groups.google.com/group/giis-use
 
 
 /* Functions involved. */
+#ifndef PORT
 static error_t parse_opt (int, char *, struct argp_state *); 
+#endif
 int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys);
 int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *,ext2_filsys);
 int giis_ext4_list_file_details(struct giis_recovered_file_info *,ext2_filsys);
@@ -138,6 +145,8 @@ static int giis_ext4_lock_db(int fd ,int offset,int len);
 
 static char args_doc[] = "";
 static char doc[] = "giis-ext4 - An undelete tool for ext4 file system.(http://www.giis.co.in)";
+
+#ifndef PORT
 static struct argp argp = {options, parse_opt, args_doc, doc};
 
 
@@ -167,7 +176,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     }
   return 0;
 }
-
+#endif
 
 int main(int argc,char *argv[]){
 ext2_filsys	current_fs = NULL;
@@ -178,10 +187,14 @@ blk_t blocksize=0;
 int retval=0;
 int i=0;
 int ans=0;
+
 struct arguments arguments;
+#ifndef PORT
 argp_parse (&argp, argc, argv, 0, 0, &arguments);
+
 if ( !(arguments.flag>0 && arguments.flag<6))
   handle_error("For usage type : giis-ext4 --help");
+#endif
 
 if(arguments.flag==4){
 giis_ext4_uninstall();
