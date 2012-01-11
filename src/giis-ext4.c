@@ -22,9 +22,8 @@
 #include <sqlite3.h>
 #include <assert.h>    /* assert */
 #include <libgen.h>
-#define PORT 1
 
-#ifndef PORT
+#ifndef ANDROID
 /* argp */
 #include <argp.h>
 #endif
@@ -93,7 +92,7 @@ struct arguments
 };
 
 
-#ifndef PORT
+#ifndef ANDROID
 static struct argp_option options[] =
 {  
   {"install",   'i', 0, 0,"Will start the installation process."},
@@ -119,7 +118,7 @@ const char *argp_program_bug_address = "<http://groups.google.com/group/giis-use
 
 
 /* Functions involved. */
-#ifndef PORT
+#ifndef ANDROID
 static error_t parse_opt (int, char *, struct argp_state *); 
 #endif
 int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys);
@@ -146,7 +145,7 @@ static int giis_ext4_lock_db(int fd ,int offset,int len);
 static char args_doc[] = "";
 static char doc[] = "giis-ext4 - An undelete tool for ext4 file system.(http://www.giis.co.in)";
 
-#ifndef PORT
+#ifndef ANDROID
 static struct argp argp = {options, parse_opt, args_doc, doc};
 
 
@@ -189,7 +188,7 @@ int i=0;
 int ans=0;
 
 struct arguments arguments;
-#ifndef PORT
+#ifndef ANDROID
 argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
 if ( !(arguments.flag>0 && arguments.flag<6))
