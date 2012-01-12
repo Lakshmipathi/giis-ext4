@@ -179,12 +179,13 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 }
 #else
 void print_usage(){
-printf("\n giis-ext4 v.08 usage giis-ext4 [option] - possible options are:");
+printf("\nUsage: giis-ext4 [OPTION...]\n%s\n%s\n",doc,argp_program_version);
 printf("\n-g, --recover              Undelete/recover files");
 printf("\n-i, --install              Will start the installation process.");
 printf("\n-l, --list                 List deleted files");
 printf("\n-q, --uninstall            Uninstalls giis-ext4");
 printf("\n-u, --update               Update to reflect current File system state\n");
+printf("\nReport bugs to %s\n",argp_program_bug_address);
 exit(0);
 }
 #endif
@@ -200,7 +201,7 @@ int i=0;
 int ans=0;
 int getopt_key=0;
 
-struct arguments arguments;
+struct arguments arguments={};
 #ifndef ANDROID
 argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
