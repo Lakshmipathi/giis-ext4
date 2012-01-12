@@ -126,7 +126,11 @@ void printusage();
 int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys);
 int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *,ext2_filsys);
 int giis_ext4_list_file_details(struct giis_recovered_file_info *,ext2_filsys);
+#ifndef ANDROID
 int giis_ext4_sqlite_insert_record(struct linux_dirent *,struct ext2_inode *,unsigned long,int,char []);
+#else
+int giis_ext4_sqlite_insert_record(struct dirent *,struct ext2_inode *,unsigned long,int,char []);
+#endif
 int giis_ext4_recover_all(ext2_filsys ,int );
 int giis_ext4_write_into_file(struct giis_recovered_file_info *,unsigned char []);
 int giis_ext4_search4fs (char *);
@@ -284,6 +288,7 @@ ext2fs_close(current_fs);
 return 1;
 }
 
+#ifndef ANDROID 
 int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_filsys current_fs)
 {
 	int fd, nread,i;
@@ -377,6 +382,84 @@ if(depth < max_dir_depth){
 	
 	return 0;
 }
+#else
+int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_filsys current_fs)
+{
+	struct dirent *dp;
+	DIR *dirp;
+	struct ext2_inode inode,*in;
+	char dir[512]={0};
+	char	*pathname=NULL;
+	extern int max_dir_depth,update,update_time;
+	in = &inode;
+
+	memset(dir,'\0',512);
+	strcpy(dir,gargv);
+	
+	dirp = opendir(dir);
+	if (dirp == NULL){
+		printf("ERROR:%s\n",dir);
+	handle_error("open");
+	}
+
+	printf("\n Parsing directory  : %s",dir);
+
+if(depth < max_dir_depth){
+	for ( ;dp; ) {
+		dp=readdir(dirp);
+		if(dp!=NULL){
+			//read inode stats
+			ext2fs_read_inode(current_fs,dp->d_ino,in);
+			//inode-stats ends
+			
+			if(dp->d_type == DT_DIR){
+				//skip system files too
+			if(strcmp(".",dp->d_name)==0 || strcmp("..",dp->d_name)==0 ){
+			continue;
+			}
+			if(dp->d_name[0]=='.'){
+			continue;
+			}
+			chdir(dir);
+			giis_ext4_parse_dir(depth+1,dp->d_name,dp->d_ino,current_fs);
+			}else
+			{
+				if (dp->d_type == DT_REG){
+					if (update==TRUE) { 
+						if(in->i_mtime > (time(0)-(update_time*60))) {
+						//check whether this entry already exists
+						 if(giis_ext4_sqlite_verify_record(dp->d_ino)){
+						//convert inode into absoulte pathname
+						pathname=NULL;
+						ext2fs_get_pathname (current_fs, parent_inode, dp->d_ino, &pathname);
+						giis_ext4_sqlite_insert_record(dp,in,parent_inode,depth,pathname);
+						 }
+
+						}
+
+					}
+					
+					if(update==FALSE){
+					//convert inode into absoulte pathname
+					pathname=NULL;
+					ext2fs_get_pathname (current_fs, parent_inode, dp->d_ino, &pathname);
+					giis_ext4_sqlite_insert_record(dp,in,parent_inode,depth,pathname);
+					}
+			
+				}	
+			}		
+
+			
+	}
+	}
+}
+	chdir("..");
+	closedir(dirp);			
+	
+	return 0;
+}
+
+#endif
 
 /*
 gets struct with file details fetched from backend and dumps content from its blocks 
@@ -451,7 +534,13 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		
 return 1;
 }
+
+#ifndef ANDROID
 int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *inode,unsigned long parent_inode,int depth,char cwd[]){
+#else
+int giis_ext4_sqlite_insert_record(struct dirent *d1,struct ext2_inode *inode,unsigned long parent_inode,int depth,char cwd[]){
+#endif
+
 	extern sqlite3 *conn;
 	sqlite3_stmt    *Stmt;
 	int     error = 0;
