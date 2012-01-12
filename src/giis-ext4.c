@@ -120,6 +120,8 @@ const char *argp_program_bug_address = "<http://groups.google.com/group/giis-use
 /* Functions involved. */
 #ifndef ANDROID
 static error_t parse_opt (int, char *, struct argp_state *); 
+#else
+void printusage();
 #endif
 int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys);
 int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *,ext2_filsys);
@@ -175,6 +177,16 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
     }
   return 0;
 }
+#else
+void print_usage(){
+printf("\n giis-ext4 v.08 usage giis-ext4 [option] - possible options are:");
+printf("\n-g, --recover              Undelete/recover files");
+printf("\n-i, --install              Will start the installation process.");
+printf("\n-l, --list                 List deleted files");
+printf("\n-q, --uninstall            Uninstalls giis-ext4");
+printf("\n-u, --update               Update to reflect current File system state\n");
+exit(0);
+}
 #endif
 
 int main(int argc,char *argv[]){
@@ -186,6 +198,7 @@ blk_t blocksize=0;
 int retval=0;
 int i=0;
 int ans=0;
+int getopt_key=0;
 
 struct arguments arguments;
 #ifndef ANDROID
@@ -193,6 +206,30 @@ argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
 if ( !(arguments.flag>0 && arguments.flag<6))
   handle_error("For usage type : giis-ext4 --help");
+#else
+while ((getopt_key = getopt(argc,argv,"iugql")) != -1)
+switch (getopt_key){
+	case 'i':
+		arguments.flag=1;
+		break;
+	case 'u':
+		arguments.flag=2;
+		break;
+	case 'g':
+		arguments.flag=3;
+		break;
+	case 'q':
+		arguments.flag=4;
+		break;
+	case 'l':
+		arguments.flag=5;
+		break;
+	default:
+		print_usage();
+
+}
+if ( !(arguments.flag>0 && arguments.flag<6))
+  print_usage();
 #endif
 
 if(arguments.flag==4){
