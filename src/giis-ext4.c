@@ -489,7 +489,7 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 				retval = io_channel_read_blk(current_fs->io, blk, 1, buf);
 					if (retval) {
 					handle_error("giis_ext4_dump_data_blocks::io_channel_read_blk:Can't read from block");
-					return;
+					return 0;
 					}
 				/* Write data into file */
 					retval=giis_ext4_write_into_file(fi,buf);
@@ -519,7 +519,7 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		pf=popen(md5_cmd,"r");
 		if(!pf){
 		fprintf(stderr,"Could not open pipe");
-		return ;
+		return 0;
 		}
 	
 		//get data
@@ -583,7 +583,7 @@ int giis_ext4_sqlite_insert_record(struct dirent *d1,struct ext2_inode *inode,un
 	pf=popen(md5_cmd,"r");
 	if(!pf){
 		fprintf(stderr,"Could not open pipe");
-		return ;
+		return -1;
 		}
 	
 	//get data
@@ -605,7 +605,7 @@ int giis_ext4_sqlite_insert_record(struct dirent *d1,struct ext2_inode *inode,un
 	assert(error == SQLITE_DONE);
 	error = sqlite3_reset(Stmt);                assert(error == SQLITE_OK);
 	sqlite3_finalize(Stmt);
-
+ return 0;
 }
 
 /* giis_ext4_recover_all : Undelete all files from all users */
@@ -732,7 +732,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 		error = sqlite3_reset(res);assert(error == SQLITE_OK);
 		sqlite3_finalize(res);
 		giis_ext4_close_db();
-
+ return 0;
 }
 int giis_ext4_write_into_file(struct giis_recovered_file_info *fi,unsigned char buf[EXT2_BLOCK_SIZE]){
 int fp;
@@ -862,6 +862,7 @@ int giis_ext4_get_date(){
 	{
 	handle_error("\n Please Enter Valid Date.");
 	}
+ return 0;
 }
 
 int giis_ext4_check_ddate(struct ext2_inode *inode){
@@ -916,7 +917,7 @@ int giis_ext4_check_ddate(struct ext2_inode *inode){
 	else
 	return 0;
 	}
-
+  return 0;
 }
 
 int giis_ext4_creat_tables(char *device){
@@ -1007,7 +1008,7 @@ int giis_ext4_creat_tables(char *device){
 
 		sqlite3_finalize(Stmt);
 
-
+    return 0;
 }
 int giis_ext4_update_dirs(ext2_filsys current_fs){
 	extern sqlite3 *conn;
@@ -1066,7 +1067,7 @@ int giis_ext4_update_dirs(ext2_filsys current_fs){
 
 				sqlite3_finalize(res);
 				giis_ext4_close_db();
-
+    return 0;
 }
 
 unsigned long getinodenumber(char *path){
@@ -1212,6 +1213,7 @@ int retval=0;
 
    printf("\n giis-ext4: cleaned up - Please remove giis-ext4 related entry from crontab file\n");
    printf("\n Don't forgot to take backups!! Good luck :)\n\n ");
+return 0;
 }
   
 int giis_ext4_list_file_details(struct giis_recovered_file_info *fi,ext2_filsys current_fs){
