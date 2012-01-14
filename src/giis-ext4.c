@@ -107,12 +107,12 @@ static struct argp_option options[] =
 int just_list;//display files
 int max_dir_depth; //will be set from giis header
 int update_time,update;
-sqlite3 *conn;
+sqlite3 *giis_ext4_conn;
 int EXT2_BLOCK_SIZE;
-int date_mode=-1,day,month,year,day1,month1,year1;
+int date_mode=-1,day,giis_ext4_month,giis_ext4_year,day1,giis_ext4_month1,giis_ext4_year1;
 int is_file_already_exists;
-int dp;
-char cwd[40];
+int giis_ext4_dptr;
+
 const char *argp_program_version = "giis-ext4 0.8 (05-Oct-2011) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
@@ -385,7 +385,7 @@ if(depth < max_dir_depth){
 #else
 int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_filsys current_fs)
 {
-	struct dirent *dp;
+	struct dirent *giis_ext4_dp;
 	DIR *dirp;
 	struct ext2_inode inode,*in;
 	char dir[512]={0};
@@ -405,34 +405,34 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 	printf("\n Parsing directory  : %s",dir);
 
 if(depth < max_dir_depth){
-	for ( ;dp; ) {
-		dp=readdir(dirp);
-		if(dp!=NULL){
+	for ( ;giis_ext4_dp; ) {
+		giis_ext4_dp=readdir(dirp);
+		if(giis_ext4_dp!=NULL){
 			//read inode stats
-			ext2fs_read_inode(current_fs,dp->d_ino,in);
+			ext2fs_read_inode(current_fs,giis_ext4_dp->d_ino,in);
 			//inode-stats ends
 			
-			if(dp->d_type == DT_DIR){
+			if(giis_ext4_dp->d_type == DT_DIR){
 				//skip system files too
-			if(strcmp(".",dp->d_name)==0 || strcmp("..",dp->d_name)==0 ){
+			if(strcmp(".",giis_ext4_dp->d_name)==0 || strcmp("..",giis_ext4_dp->d_name)==0 ){
 			continue;
 			}
-			if(dp->d_name[0]=='.'){
+			if(giis_ext4_dp->d_name[0]=='.'){
 			continue;
 			}
 			chdir(dir);
-			giis_ext4_parse_dir(depth+1,dp->d_name,dp->d_ino,current_fs);
+			giis_ext4_parse_dir(depth+1,giis_ext4_dp->d_name,giis_ext4_dp->d_ino,current_fs);
 			}else
 			{
-				if (dp->d_type == DT_REG){
+				if (giis_ext4_dp->d_type == DT_REG){
 					if (update==TRUE) { 
 						if(in->i_mtime > (time(0)-(update_time*60))) {
 						//check whether this entry already exists
-						 if(giis_ext4_sqlite_verify_record(dp->d_ino)){
+						 if(giis_ext4_sqlite_verify_record(giis_ext4_dp->d_ino)){
 						//convert inode into absoulte pathname
 						pathname=NULL;
-						ext2fs_get_pathname (current_fs, parent_inode, dp->d_ino, &pathname);
-						giis_ext4_sqlite_insert_record(dp,in,parent_inode,depth,pathname);
+						ext2fs_get_pathname (current_fs, parent_inode, giis_ext4_dp->d_ino, &pathname);
+						giis_ext4_sqlite_insert_record(giis_ext4_dp,in,parent_inode,depth,pathname);
 						 }
 
 						}
@@ -442,8 +442,8 @@ if(depth < max_dir_depth){
 					if(update==FALSE){
 					//convert inode into absoulte pathname
 					pathname=NULL;
-					ext2fs_get_pathname (current_fs, parent_inode, dp->d_ino, &pathname);
-					giis_ext4_sqlite_insert_record(dp,in,parent_inode,depth,pathname);
+					ext2fs_get_pathname (current_fs, parent_inode, giis_ext4_dp->d_ino, &pathname);
+					giis_ext4_sqlite_insert_record(giis_ext4_dp,in,parent_inode,depth,pathname);
 					}
 			
 				}	
@@ -541,8 +541,8 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 int giis_ext4_sqlite_insert_record(struct dirent *d1,struct ext2_inode *inode,unsigned long parent_inode,int depth,char cwd[]){
 #endif
 
-	extern sqlite3 *conn;
-	sqlite3_stmt    *Stmt;
+	extern sqlite3 *giis_ext4_conn;
+	sqlite3_stmt    *giis_ext4_Stmt;
 	int     error = 0;
 	char *dbfile=SQLITE_DB_LOCATION;
 	char  *errmsg;
@@ -552,30 +552,30 @@ int giis_ext4_sqlite_insert_record(struct dirent *d1,struct ext2_inode *inode,un
 	FILE *pf;
 		
 		
-	error = sqlite3_prepare(conn,SQL_STMT_INSERT_TABLE, -1, &Stmt, &zLeftover);
+	error = sqlite3_prepare(giis_ext4_conn,SQL_STMT_INSERT_TABLE, -1, &giis_ext4_Stmt, &zLeftover);
 	assert(error == SQLITE_OK);
 
 
 
-	error = sqlite3_bind_text(Stmt, 1,d1->d_name, strlen(d1->d_name), SQLITE_STATIC);assert(error == SQLITE_OK);
-	error = sqlite3_bind_int64(Stmt, 2,d1->d_ino);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int64(Stmt, 3,parent_inode);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 4,inode->i_mode);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 5,inode->i_uid);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 6,inode->i_flags);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int64(Stmt, 7,inode->i_size);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 8,inode->i_mode);assert(error == SQLITE_OK);
-	error = sqlite3_bind_text(Stmt, 9,cwd, strlen(cwd), SQLITE_STATIC);assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 10,inode->i_gid);assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 11,depth);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 12,inode->i_block[4]);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int64(Stmt, 13,inode->i_block[5]);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 14,inode->i_block[7]);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int64(Stmt, 15,inode->i_block[8]);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 16,inode->i_block[10]);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int64(Stmt, 17,inode->i_block[11]);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 18,inode->i_block[13]);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int64(Stmt, 19,inode->i_block[14]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_text(giis_ext4_Stmt, 1,d1->d_name, strlen(d1->d_name), SQLITE_STATIC);assert(error == SQLITE_OK);
+	error = sqlite3_bind_int64(giis_ext4_Stmt, 2,d1->d_ino);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int64(giis_ext4_Stmt, 3,parent_inode);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 4,inode->i_mode);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 5,inode->i_uid);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 6,inode->i_flags);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int64(giis_ext4_Stmt, 7,inode->i_size);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 8,inode->i_mode);assert(error == SQLITE_OK);
+	error = sqlite3_bind_text(giis_ext4_Stmt, 9,cwd, strlen(cwd), SQLITE_STATIC);assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 10,inode->i_gid);assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 11,depth);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 12,inode->i_block[4]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int64(giis_ext4_Stmt, 13,inode->i_block[5]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 14,inode->i_block[7]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int64(giis_ext4_Stmt, 15,inode->i_block[8]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 16,inode->i_block[10]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int64(giis_ext4_Stmt, 17,inode->i_block[11]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(giis_ext4_Stmt, 18,inode->i_block[13]);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int64(giis_ext4_Stmt, 19,inode->i_block[14]);   assert(error == SQLITE_OK);
 	//compute md5 
 	memset(md5_cmd,'\0',512);
 	sprintf(md5_cmd,"md5sum %s",cwd);
@@ -591,10 +591,10 @@ int giis_ext4_sqlite_insert_record(struct dirent *d1,struct ext2_inode *inode,un
                                                   
          if (pclose(pf) != 0)
          fprintf(stderr," Error: close Failed.");
-	error = sqlite3_bind_text(Stmt, 20,md5sum, 34, SQLITE_STATIC);assert(error == SQLITE_OK);
+	error = sqlite3_bind_text(giis_ext4_Stmt, 20,md5sum, 34, SQLITE_STATIC);assert(error == SQLITE_OK);
 
 	up:
-	error = sqlite3_step(Stmt); 
+	error = sqlite3_step(giis_ext4_Stmt); 
 	if(error==SQLITE_BUSY){
 	printf("\n data base is busy wait 20 seconds");
 	printf("\n ->>%d<<-",error);
@@ -603,15 +603,15 @@ int giis_ext4_sqlite_insert_record(struct dirent *d1,struct ext2_inode *inode,un
 	}
 
 	assert(error == SQLITE_DONE);
-	error = sqlite3_reset(Stmt);                assert(error == SQLITE_OK);
-	sqlite3_finalize(Stmt);
+	error = sqlite3_reset(giis_ext4_Stmt);                assert(error == SQLITE_OK);
+	sqlite3_finalize(giis_ext4_Stmt);
  return 0;
 }
 
 /* giis_ext4_recover_all : Undelete all files from all users */
 int giis_ext4_recover_all(ext2_filsys current_fs,int option){
-	extern sqlite3 *conn;
-	sqlite3_stmt    *res,*Stmt;
+	extern sqlite3 *giis_ext4_conn;
+	sqlite3_stmt    *res,*giis_ext4_Stmt;
 	int     error = 0,uid=-1;
 	int     rec_count = 0;
 	const char      *errMSG;
@@ -635,7 +635,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 		}
 		if(option == 1){
 		//recover all
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_ALL,-1, &res, &tail);
+		error = sqlite3_prepare_v2(giis_ext4_conn,SQL_STMT_GET_ALL,-1, &res, &tail);
 		}else if(option == 2){
 		//recover specific user
 		buf = malloc(8192);
@@ -654,19 +654,19 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 		
 		uid=pwd.pw_uid;
 		
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_USR,-1, &res, &tail);
+		error = sqlite3_prepare_v2(giis_ext4_conn,SQL_STMT_GET_USR,-1, &res, &tail);
 		error = sqlite3_bind_int(res,1,uid);   assert(error == SQLITE_OK);
 		}else if (option == 3){
 		printf("\n Make sure you use \% before extentions - sql injection :) ");
 		puts("\n Enter the file extention  ( %.txt or  %.c or %.cpp ...) :");
 		scanf("%s",extention);
 
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_FTYPE,-1, &res, &tail);
+		error = sqlite3_prepare_v2(giis_ext4_conn,SQL_STMT_GET_FTYPE,-1, &res, &tail);
 		error = sqlite3_bind_text(res, 1,extention,strlen(extention), SQLITE_STATIC);   assert(error == SQLITE_OK);
 		}else if (option == 4){
 		printf ("\n Enter the Filename Name....");
 		scanf ("%s", file);
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_FILE,-1, &res, &tail);
+		error = sqlite3_prepare_v2(giis_ext4_conn,SQL_STMT_GET_FILE,-1, &res, &tail);
 		error = sqlite3_bind_text(res, 1,file,strlen(file), SQLITE_STATIC);   assert(error == SQLITE_OK);
 		}
 
@@ -839,7 +839,7 @@ return 1;
 }
 //
 int giis_ext4_get_date(){
-	extern int date_mode,day,month,year,day1,month1,year1; /* Time based recovery */
+	extern int date_mode,day,giis_ext4_month,giis_ext4_year,day1,giis_ext4_month1,giis_ext4_year1; /* Time based recovery */
 	date_mode=-1;
 	printf("\n\nGet Files by Deleted Date:\n\tPress 0 : Deleted on\n\tPress 1 : Deleted After\n\tPress 2 : Deleted Before \n\tPress 3 : Deleted Between");
 	printf("\n\n\t\tEnter Your Choice :");
@@ -851,14 +851,14 @@ int giis_ext4_get_date(){
 
 	if(date_mode >= 0 && date_mode <= 3 ){
 	printf("\n Enter date1: DD MM YYYY :");
-	scanf("%d %d %d",&day,&month,&year);
+	scanf("%d %d %d",&day,&giis_ext4_month,&giis_ext4_year);
 	}
 	if(date_mode == 3){
 	printf("\n Enter date2: DD MM YYYY :");
-	scanf("%d %d %d",&day1,&month1,&year1);
+	scanf("%d %d %d",&day1,&giis_ext4_month1,&giis_ext4_year1);
 	}
 	// date validation
-	if(((day<=0 || day>31)||(month<=0 || month>12)||(year<1000))||((date_mode == 3)&&(day1<=0 || day1>31 || month1<=0 || month1>12|| year1<1000 )))
+	if(((day<=0 || day>31)||(giis_ext4_month<=0 || giis_ext4_month>12)||(giis_ext4_year<1000))||((date_mode == 3)&&(day1<=0 || day1>31 || giis_ext4_month1<=0 || giis_ext4_month1>12|| giis_ext4_year1<1000 )))
 	{
 	handle_error("\n Please Enter Valid Date.");
 	}
@@ -866,12 +866,12 @@ int giis_ext4_get_date(){
 }
 
 int giis_ext4_check_ddate(struct ext2_inode *inode){
-	extern int date_mode,day,month,year,day1,month1,year1; /* Time based recovery */
+	extern int date_mode,day,giis_ext4_month,giis_ext4_year,day1,giis_ext4_month1,giis_ext4_year1; /* Time based recovery */
 	time_t result,result1;					/* time n date  used for Time based recovery*/
 	struct tm mytm = { 0 };
 
-	mytm.tm_year = year - 1900;
-	mytm.tm_mon = month - 1;
+	mytm.tm_year = giis_ext4_year - 1900;
+	mytm.tm_mon = giis_ext4_month - 1;
 	mytm.tm_mday = day;
 	result = mktime(&mytm);
 	if (result == (time_t) -1) {
@@ -906,8 +906,8 @@ int giis_ext4_check_ddate(struct ext2_inode *inode){
 	//Deleted between 
 	if(date_mode==3){
 	//set to-date
-	mytm.tm_year = year1 - 1900;
-	mytm.tm_mon = month1 - 1;
+	mytm.tm_year = giis_ext4_year1 - 1900;
+	mytm.tm_mon = giis_ext4_month1 - 1;
 	mytm.tm_mday = day1;
 	result1 = mktime(&mytm);
 
@@ -921,8 +921,8 @@ int giis_ext4_check_ddate(struct ext2_inode *inode){
 }
 
 int giis_ext4_creat_tables(char *device){
-	extern sqlite3 *conn;
-	sqlite3_stmt    *Stmt;
+	extern sqlite3 *giis_ext4_conn;
+	sqlite3_stmt    *giis_ext4_Stmt;
 	int     error = 0;
 	char *dbfile=SQLITE_DB_LOCATION;
 	char  *errmsg;
@@ -946,7 +946,7 @@ int giis_ext4_creat_tables(char *device){
 		giis_ext4_open_db();
 		printf("\n giis-ext4:Installation begins..");
 		//Creat giisheader table
-		error = sqlite3_exec(conn,SQL_STMT_CREATE_HEADER,0,0,0);
+		error = sqlite3_exec(giis_ext4_conn,SQL_STMT_CREATE_HEADER,0,0,0);
 
 		if (error) {
 			fprintf(stderr, "Can not create table:  \n" );
@@ -958,7 +958,7 @@ int giis_ext4_creat_tables(char *device){
 
 
 		//create table
-		error = sqlite3_exec(conn,SQL_STMT_CREATE_TABLE,0,0,0);
+		error = sqlite3_exec(giis_ext4_conn,SQL_STMT_CREATE_TABLE,0,0,0);
 
 		if (error) {
 			fprintf(stderr, "Can not create table:  \n" );
@@ -984,35 +984,35 @@ int giis_ext4_creat_tables(char *device){
 
 
 		/*Now insert the records into giis header table */
-		error = sqlite3_prepare(conn,SQL_STMT_INSERT_HEADER, -1, &Stmt, &zLeftover);
+		error = sqlite3_prepare(giis_ext4_conn,SQL_STMT_INSERT_HEADER, -1, &giis_ext4_Stmt, &zLeftover);
 		assert(error == SQLITE_OK);
 
-		error = sqlite3_bind_int(Stmt, 1,max_depth);   assert(error == SQLITE_OK);
-		error = sqlite3_bind_int(Stmt, 2,update_time);   assert(error == SQLITE_OK);
-		error = sqlite3_bind_text(Stmt, 3,device, strlen(device), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_int(giis_ext4_Stmt, 1,max_depth);   assert(error == SQLITE_OK);
+		error = sqlite3_bind_int(giis_ext4_Stmt, 2,update_time);   assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 3,device, strlen(device), SQLITE_STATIC);assert(error == SQLITE_OK);
 	
-		error = sqlite3_bind_text(Stmt, 4,dirname[0], strlen(dirname[0]), SQLITE_STATIC);assert(error == SQLITE_OK);
-		error = sqlite3_bind_text(Stmt, 5,dirname[1], strlen(dirname[1]), SQLITE_STATIC);assert(error == SQLITE_OK);
-		error = sqlite3_bind_text(Stmt, 6,dirname[2], strlen(dirname[2]), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 4,dirname[0], strlen(dirname[0]), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 5,dirname[1], strlen(dirname[1]), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 6,dirname[2], strlen(dirname[2]), SQLITE_STATIC);assert(error == SQLITE_OK);
 
-		error = sqlite3_bind_text(Stmt, 7,dirname[3], strlen(dirname[3]), SQLITE_STATIC);assert(error == SQLITE_OK);
-		error = sqlite3_bind_text(Stmt, 8,dirname[4], strlen(dirname[4]), SQLITE_STATIC);assert(error == SQLITE_OK);
-		error = sqlite3_bind_text(Stmt, 9,dirname[5], strlen(dirname[5]), SQLITE_STATIC);assert(error == SQLITE_OK);
-		error = sqlite3_bind_text(Stmt, 10,dirname[6], strlen(dirname[6]), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 7,dirname[3], strlen(dirname[3]), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 8,dirname[4], strlen(dirname[4]), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 9,dirname[5], strlen(dirname[5]), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(giis_ext4_Stmt, 10,dirname[6], strlen(dirname[6]), SQLITE_STATIC);assert(error == SQLITE_OK);
 
 	
 
-		error = sqlite3_step(Stmt);                 assert(error == SQLITE_DONE);
-		error = sqlite3_reset(Stmt);                assert(error == SQLITE_OK);
+		error = sqlite3_step(giis_ext4_Stmt);                 assert(error == SQLITE_DONE);
+		error = sqlite3_reset(giis_ext4_Stmt);                assert(error == SQLITE_OK);
 
 
-		sqlite3_finalize(Stmt);
+		sqlite3_finalize(giis_ext4_Stmt);
 
     return 0;
 }
 int giis_ext4_update_dirs(ext2_filsys current_fs){
-	extern sqlite3 *conn;
-	sqlite3_stmt    *Stmt;
+	extern sqlite3 *giis_ext4_conn;
+	sqlite3_stmt    *giis_ext4_Stmt;
 	int     error = 0;
 	char *dbfile=SQLITE_DB_LOCATION;
 	char  *errmsg;
@@ -1030,7 +1030,7 @@ int giis_ext4_update_dirs(ext2_filsys current_fs){
 	di=&s_giis_protected_dir_info;
 
 
-	error = sqlite3_prepare_v2(conn,SQL_STMT_GET_DIRNAMES,-1, &res, &tail);
+	error = sqlite3_prepare_v2(giis_ext4_conn,SQL_STMT_GET_DIRNAMES,-1, &res, &tail);
 	if (error != SQLITE_OK) {
 		handle_error("No matching record found.");
 	}
@@ -1080,17 +1080,17 @@ unsigned long getinodenumber(char *path){
 }
 
 void giis_ext4_close_db(){
-extern sqlite3 *conn;
+extern sqlite3 *giis_ext4_conn;
 
 	close2:
-	while(sqlite3_close(conn)==SQLITE_BUSY){
+	while(sqlite3_close(giis_ext4_conn)==SQLITE_BUSY){
 	printf("\n Db not closed");
 	sleep(5);
 	goto close2;
 	}
 		
 	if(update==TRUE){
-		if (giis_ext4_unlock_db(dp,0,0) !=0)
+		if (giis_ext4_unlock_db(giis_ext4_dptr,0,0) !=0)
 		printf("unlock failed");
 	}
 }
@@ -1125,23 +1125,23 @@ return fcntl(fd,F_GETLK,&lock);
 }
 
 void giis_ext4_open_db(){
-extern sqlite3 *conn;
+extern sqlite3 *giis_ext4_conn;
 int     error = 0;
 char *dbfile=SQLITE_DB_LOCATION;
-extern int dp;
+extern int giis_ext4_dptr;
 	
 	if(update==TRUE){
-		dp=open(dbfile,O_RDWR);
+		giis_ext4_dptr=open(dbfile,O_RDWR);
 
-		if (giis_ext4_lock_db(dp,0,0) !=0){
+		if (giis_ext4_lock_db(giis_ext4_dptr,0,0) !=0){
 		printf("lock failed");
-		giis_ext4_get_lock(dp,0,1);
+		giis_ext4_get_lock(giis_ext4_dptr,0,1);
 		}
 	}
 	
 
 
-	error = sqlite3_open(dbfile, &conn);
+	error = sqlite3_open(dbfile, &giis_ext4_conn);
 	assert(error == SQLITE_OK);
 	if (error) {
 				handle_error("Can not open database");
@@ -1150,23 +1150,23 @@ extern int dp;
 //todo:this function currently just check whether record exists or not.
 int giis_ext4_sqlite_verify_record(unsigned long number){
   int     error = 0;
-  sqlite3_stmt    *Stmt;
+  sqlite3_stmt    *giis_ext4_Stmt;
   const char      *tail;
-	error = sqlite3_prepare_v2(conn,SQL_STMT_VERIFY_INODE,-1, &Stmt, &tail);
-	error = sqlite3_bind_int64(Stmt,1,number);   assert(error == SQLITE_OK);
+	error = sqlite3_prepare_v2(giis_ext4_conn,SQL_STMT_VERIFY_INODE,-1, &giis_ext4_Stmt, &tail);
+	error = sqlite3_bind_int64(giis_ext4_Stmt,1,number);   assert(error == SQLITE_OK);
 	if (error != SQLITE_OK) {
 		 printf("No matching record found");
 		 return 1;
 	}
 	printf("\ninode<%lu>",number);
-	if (sqlite3_step(Stmt) == SQLITE_ROW){
+	if (sqlite3_step(giis_ext4_Stmt) == SQLITE_ROW){
 	  printf("Record already exists");   
-	  sqlite3_finalize(Stmt);
+	  sqlite3_finalize(giis_ext4_Stmt);
 	  return 1;
 	}
 	else{
 	  printf("No Record already exists");     
-	  sqlite3_finalize(Stmt);
+	  sqlite3_finalize(giis_ext4_Stmt);
 	  return 1;
 	}
 	
