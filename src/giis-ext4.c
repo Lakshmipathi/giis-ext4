@@ -205,7 +205,7 @@ int i=0;
 int ans=0;
 int getopt_key=0;
 
-struct arguments arguments={};
+struct arguments arguments={'\0'};
 #ifndef ANDROID
 argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
@@ -657,7 +657,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 		error = sqlite3_prepare_v2(giis_ext4_conn,SQL_STMT_GET_USR,-1, &res, &tail);
 		error = sqlite3_bind_int(res,1,uid);   assert(error == SQLITE_OK);
 		}else if (option == 3){
-		printf("\n Make sure you use \% before extentions - sql injection :) ");
+		printf("\n Make sure you use %% before extentions - sql injection :) ");
 		puts("\n Enter the file extention  ( %.txt or  %.c or %.cpp ...) :");
 		scanf("%s",extention);
 
@@ -677,7 +677,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 		printf("\n Verifing inode:");
 		while (sqlite3_step(res) == SQLITE_ROW) {
 		
-			fi->fname=sqlite3_column_text(res, 0);
+			fi->fname=(char *)sqlite3_column_text(res, 0);
 
 			fi->inode_num=sqlite3_column_int64(res, 1);
 			if(!just_list)
@@ -697,13 +697,13 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 
 			fi->fsize=sqlite3_column_int64(res, 10);
 		
-			fi->fpath=sqlite3_column_text(res, 11);
+			fi->fpath=(char *)sqlite3_column_text(res, 11);
 			
 			fi->mode=sqlite3_column_int(res, 12);
 			
 			fi->owner=sqlite3_column_int(res, 13);
 			fi->group=sqlite3_column_int(res, 14);
-			fi->md5sum=sqlite3_column_text(res, 15);
+			fi->md5sum=(char *)sqlite3_column_text(res, 15);
 
 			ext2fs_read_inode(current_fs,fi->inode_num,&inode);
 
@@ -868,7 +868,7 @@ int giis_ext4_get_date(){
 int giis_ext4_check_ddate(struct ext2_inode *inode){
 	extern int date_mode,day,giis_ext4_month,giis_ext4_year,day1,giis_ext4_month1,giis_ext4_year1; /* Time based recovery */
 	time_t result,result1;					/* time n date  used for Time based recovery*/
-	struct tm mytm = { 0 };
+	struct tm mytm = { '\0' };
 
 	mytm.tm_year = giis_ext4_year - 1900;
 	mytm.tm_mon = giis_ext4_month - 1;
@@ -1039,16 +1039,16 @@ int giis_ext4_update_dirs(ext2_filsys current_fs){
 	if (sqlite3_step(res) == SQLITE_ROW) {
 			di->max_depth=sqlite3_column_int(res, 0);
 			di->update_time=sqlite3_column_int(res, 1);
-			di->device_name=sqlite3_column_text(res, 2);
+			di->device_name=(char *)sqlite3_column_text(res, 2);
 			
-			di->protected_dir[0]=sqlite3_column_text(res, 3);
-			di->protected_dir[1]=sqlite3_column_text(res, 4);
-			di->protected_dir[2]=sqlite3_column_text(res, 5);
-			di->protected_dir[3]=sqlite3_column_text(res, 6);
+			di->protected_dir[0]=(char *)sqlite3_column_text(res, 3);
+			di->protected_dir[1]=(char *)sqlite3_column_text(res, 4);
+			di->protected_dir[2]=(char *)sqlite3_column_text(res, 5);
+			di->protected_dir[3]=(char *)sqlite3_column_text(res, 6);
 
-			di->protected_dir[4]=sqlite3_column_text(res, 7);
-			di->protected_dir[5]=sqlite3_column_text(res, 8);
-			di->protected_dir[6]=sqlite3_column_text(res, 9);
+			di->protected_dir[4]=(char *)sqlite3_column_text(res, 7);
+			di->protected_dir[5]=(char *)sqlite3_column_text(res, 8);
+			di->protected_dir[6]=(char *)sqlite3_column_text(res, 9);
 			
 
 			//set max_depth 
