@@ -12,7 +12,7 @@
 
 About giis:
 ==========
-gET iT i sAY.giis is a text based file recovery tool.Once you install giis,files on your disk can be recovered using giis.
+gET iT i sAY.giis-ext4 is a text based file recovery tool.Once you install giis,files on your disk can be recovered using giis.
 But Those files which deleted before the installation giis can't be recovered using giis.User has the option to choose directories too.
 Add only those directories where you will store important data.(adding directories like /tmp gives giis overhead and installation 
 will take long time).It can recovers a deleted file and restores in it's original directory,if path exists.It recovers dropped 
