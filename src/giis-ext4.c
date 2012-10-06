@@ -632,34 +632,31 @@ return 1;
 /* giis_ext4_search4fs : Taken from giis/init.c */
 int giis_ext4_search4fs (char *device)
 {
-int fp, i = 0, c = 1;
-char a;
-fp = open ("/etc/mtab", 0);
-if (fp == -1)
+FILE *fd;
+char *line=NULL;
+char *wordptr=NULL;
+int bytes=180;
+fd = fopen ("/etc/mtab", "r");
+if (fd == NULL)
 {
 handle_error("giis_ext4_search4fs::unable to open /etc/mtab");
 }
-do
-{
-i = read (fp, &a, 1);
-if (i == -1)
-{
-handle_error("giis_ext4_search4fs::unable to read /etc/mtab");
 
-}
-}
-while (a != '/');
-c = 0;
-while (a != ' ')
-{
-device[c] = a;
-c++;
-i = read (fp, &a, 1);
-}
-device[c] = '\0';
-printf("\n Device Found : %s",device);
+	while (fd !=NULL){
+		if (getline(&line,&bytes,fd) == -1){
+			//puts("EOF");
+			return -1;
+		}
 
-return 1;
+		if (strstr(line,"/ ext4 ") !=NULL){
+			wordptr = strtok(line," "); 
+			strcpy(device,wordptr);
+			printf("\n Device Found : %s",device);
+			return 1;
+			
+		}			
+	}
+return -1;
 }
 /* log file */
 int giis_ext4_log_mesg(char *mesg,char *md5sum,char *new_md5sum){
