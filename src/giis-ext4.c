@@ -287,7 +287,39 @@ if(depth < max_dir_depth){
 			bpos += d->d_reclen;
 			continue;
 			}
+				//printf("\n -->checking dir:%s -mtime=%u  ctime=%u",d->d_name,in->i_mtime,in->i_ctime);
+				if(giis_ext4_sqlite_verify_record_for_directory(d->d_ino,in->i_mtime,in->i_ctime)){
+					//if time-stamp are same - If its update && its not new directory - then skipdir
+					//if time-stamp are - during install - don't skipdir.
+					if(update==TRUE && (giis_ext4_sqlite_verify_record(d->d_ino)==0)){
+					printf("\n\tskipdir   :  %s",d->d_name);
+					goto skipdir;
+					}
+					printf("\n\tupdatedir : %s",d->d_name);
+				}
 				chdir(dir);
+				//If its directory insert the record too.
+					if (update==TRUE) { 
+					//	if(in->i_mtime > (time(0)-(update_time*60))) {
+						//check whether this entry already exists
+						 if(giis_ext4_sqlite_verify_record(d->d_ino)){
+						//convert inode into absoulte pathname
+						pathname=NULL;
+						ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
+						giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
+						 }
+
+					//	}
+
+					}
+					
+					if(update==FALSE){
+					//convert inode into absoulte pathname
+					pathname=NULL;
+					ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
+					giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
+					}
+				//parse this directory, if and only if mtime or ctime changed.
 				giis_ext4_parse_dir(depth+1,d->d_name,d->d_ino,current_fs);
 			
 			}else
@@ -316,7 +348,7 @@ if(depth < max_dir_depth){
 			
 				}	
 			}		
-
+		skipdir:
 		bpos += d->d_reclen;
 			
 	}
@@ -430,14 +462,32 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 	error = sqlite3_bind_int(Stmt, 10,inode->i_gid);assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 11,depth);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 12,inode->i_block[4]);   assert(error == SQLITE_OK);
+
+	//If its directory field 13(blk1),15(blk2) will have mtime and ctime 
+	if (S_ISREG(inode->i_mode)){
 	error = sqlite3_bind_int64(Stmt, 13,inode->i_block[5]);   assert(error == SQLITE_OK);
+	}
+	else{
+	error = sqlite3_bind_int64(Stmt, 13,inode->i_mtime);   assert(error == SQLITE_OK);
+	}
+	
+	
 	error = sqlite3_bind_int(Stmt, 14,inode->i_block[7]);   assert(error == SQLITE_OK);
+
+	if (S_ISREG(inode->i_mode)){
 	error = sqlite3_bind_int64(Stmt, 15,inode->i_block[8]);   assert(error == SQLITE_OK);
+	}
+	else{
+	error = sqlite3_bind_int64(Stmt, 15,inode->i_ctime);   assert(error == SQLITE_OK);
+	}
+	
 	error = sqlite3_bind_int(Stmt, 16,inode->i_block[10]);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int64(Stmt, 17,inode->i_block[11]);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 18,inode->i_block[13]);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int64(Stmt, 19,inode->i_block[14]);   assert(error == SQLITE_OK);
 	//compute md5 
+	if (S_ISREG(inode->i_mode)){
+	
 	memset(md5_cmd,'\0',512);
 	sprintf(md5_cmd,"md5sum %s",cwd);
 	
@@ -453,6 +503,8 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
          if (pclose(pf) != 0)
          fprintf(stderr," Error: close Failed.");
 	error = sqlite3_bind_text(Stmt, 20,md5sum, 34, SQLITE_STATIC);assert(error == SQLITE_OK);
+	}
+	
 
 	up:
 	error = sqlite3_step(Stmt); 
@@ -568,7 +620,7 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 
 			ext2fs_read_inode(current_fs,fi->inode_num,&inode);
 
-			if (in->i_links_count ==0 ){
+			if (in->i_links_count ==0 && S_ISREG(fi->mode)){
 				if(date_mode !=-1){
 				if((giis_ext4_check_ddate(in)==1) && (fi->starting_block[0])){
 					if(!just_list)
@@ -1015,14 +1067,46 @@ int giis_ext4_sqlite_verify_record(unsigned long number){
 		 printf("No matching record found");
 		 return 1;
 	}
-	printf("\ninode<%lu>",number);
+	//printf("\ninode<%lu>",number);
 	if (sqlite3_step(Stmt) == SQLITE_ROW){
-	  printf("Record already exists");   
+	  //printf("Record already exists");   
+	  sqlite3_finalize(Stmt);
+	  return 0;
+	}
+	else{
+	//  printf("No Record already exists");     
 	  sqlite3_finalize(Stmt);
 	  return 1;
 	}
+	
+}
+int giis_ext4_sqlite_verify_record_for_directory(unsigned long number,unsigned long mtime,unsigned long ctime){
+  int     error = 0;
+  sqlite3_stmt    *Stmt;
+  const char      *tail;
+  unsigned long db_ctime,db_mtime;
+	error = sqlite3_prepare_v2(conn,SQL_STMT_VERIFY_INODE,-1, &Stmt, &tail);
+	error = sqlite3_bind_int64(Stmt,1,number);   assert(error == SQLITE_OK);
+	if (error != SQLITE_OK) {
+		 printf("No matching record found");
+		 return 1;
+	}
+//	printf("\ninode<%lu>",number);
+	if (sqlite3_step(Stmt) == SQLITE_ROW){
+//	  printf("Record already exists");   
+          db_mtime=sqlite3_column_int64(Stmt, 12);
+          db_ctime=sqlite3_column_int64(Stmt, 14);
+	  sqlite3_finalize(Stmt);
+//	  printf ("\n db %u %u %u %u",db_mtime,db_ctime);
+
+	  if ((db_mtime == mtime) && (db_ctime == ctime))
+	  return 1;
+	  else
+	  return 0;
+		
+	}
 	else{
-	  printf("No Record already exists");     
+//	  printf("No Record already exists");     
 	  sqlite3_finalize(Stmt);
 	  return 1;
 	}
@@ -1031,6 +1115,10 @@ int giis_ext4_sqlite_verify_record(unsigned long number){
 //this function will remove giis-ext4
 int giis_ext4_uninstall(){
 int retval=0;
+  printf("\n\t Press 1 to uninstall:");
+  scanf("%d",&retval);
+  if(retval==1){
+	
   retval=unlink (SQLITE_DB_LOCATION);
   if (retval == 0)
     printf ("\n\t%s Removed",SQLITE_DB_LOCATION);
@@ -1070,6 +1158,7 @@ int retval=0;
 
    printf("\n giis-ext4: cleaned up - Please remove giis-ext4 related entry from crontab file\n");
    printf("\n Don't forgot to take backups!! Good luck :)\n\n ");
+  }
 }
   
 int giis_ext4_list_file_details(struct giis_recovered_file_info *fi,ext2_filsys current_fs){
