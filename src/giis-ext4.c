@@ -1,7 +1,7 @@
 /*
 * /giis/giis-ext4.c-Ext4 Undelete Tool.
 *
-* Copyright (C) 2010,2011 Lakshmipathi.G <lakshmipathi.g@gmail.com>
+* Copyright (C) 2010,2011,2012 Lakshmipathi.G <lakshmipathi.g@giis.co.in>
 * Visit www.giis.co.in for manuals or docs.
 */
 
@@ -109,7 +109,7 @@ int date_mode=-1,day,month,year,day1,month1,year1;
 int is_file_already_exists;
 int dp;
 char cwd[40];
-const char *argp_program_version = "giis-ext4 0.9 (11-11-2011) ";
+const char *argp_program_version = "giis-ext4 1.0 (06-11-2012) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
 

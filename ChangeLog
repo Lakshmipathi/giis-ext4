@@ -1,3 +1,7 @@
+2012-11-06 Lakshmipathi.G<lakshmipathi.g@giis.co.in>
+       * Release of giis-ext4 1.0
+			- Parse mtab more cleanly.(works with openSUSE)
+			- Skip scanning un-modified directories during update
 ..............................................................................
 2011-11-11 Lakshmipathi.G<lakshmipathi.g@giis.co.in>
        * Release of giis-ext4 0.9
