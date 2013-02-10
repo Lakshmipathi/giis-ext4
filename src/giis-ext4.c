@@ -24,6 +24,8 @@
 #include <libgen.h>
 /* argp */
 #include <argp.h>
+/* Parse mtab entries */
+#include <mntent.h>
 
 
 /* SQL statements used in this program */
@@ -52,6 +54,7 @@ do { perror(msg); exit(EXIT_FAILURE); } while (0)
 #define BUF_SIZE 1024
 #define TRUE 1
 #define FALSE 0
+#define MAXPATHLEN 4096
 
 
 
@@ -100,6 +103,13 @@ static struct argp_option options[] =
   {0}
 };
 
+struct partition_info {
+	char device[75];
+	char mntdir[75];
+	struct partition_info* next;
+}*pinfo;
+
+
 int just_list;//display files
 int max_dir_depth; //will be set from giis header
 int update_time,update;
@@ -109,6 +119,9 @@ int date_mode=-1,day,month,year,day1,month1,year1;
 int is_file_already_exists;
 int dp;
 char cwd[40];
+int multi_partition=FALSE;
+char device[75];
+char device_mnt_dir[75];
 const char *argp_program_version = "giis-ext4 1.0 (06-11-2012) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
@@ -134,7 +147,10 @@ int giis_ext4_sqlite_verify_record(unsigned long);
 int giis_ext4_uninstall(void);
 static int giis_ext4_unlock_db(int fd ,int offset,int len);
 static int giis_ext4_lock_db(int fd ,int offset,int len);
-
+int giis_ext4_search4fs_all(struct partition_info** );
+void giis_ext4_device_list(struct partition_info* );
+int giis_ext4_recover_all_helper(ext2_filsys,sqlite3_stmt *,struct ext2_inode *);
+void giis_ext4_validate_path_device(ext2_filsys,char *);
 
 static char args_doc[] = "";
 static char doc[] = "giis-ext4 - An undelete tool for ext4 file system.(http://www.giis.co.in)";
@@ -171,7 +187,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 int main(int argc,char *argv[]){
 ext2_filsys	current_fs = NULL;
-char device[75];
+extern char device[75];
 int  open_flags = EXT2_FLAG_SOFTSUPP_FEATURES | EXT2_FLAG_RW;
 blk_t superblock=0;
 blk_t blocksize=0;
@@ -179,6 +195,8 @@ int retval=0;
 int i=0;
 int ans=0;
 struct arguments arguments;
+extern struct partition_info *pinfo;
+
 argp_parse (&argp, argc, argv, 0, 0, &arguments);
 if ( !(arguments.flag>0 && arguments.flag<6))
   handle_error("For usage type : giis-ext4 --help");
@@ -187,13 +205,16 @@ if(arguments.flag==4){
 giis_ext4_uninstall();
 exit(0);
 }
-
+giis_ext4_search4fs_all(&pinfo);
 //get device name
 retval=giis_ext4_search4fs (device);
 if(retval == -1){
 		handle_error("Root File System not Found.Exiting.");
 		}	
+giis_ext4_device_list(pinfo);
+//exit(0);
 
+struct partition_info *current=pinfo;
 retval = ext2fs_open(device, open_flags, superblock, blocksize,unix_io_manager, &current_fs);
 if (retval) {
 		current_fs = NULL;
@@ -225,6 +246,7 @@ scanf("%d",&ans);
 
 giis_ext4_recover_all(current_fs,ans);
 printf("\n\n **giis-ext4 : Recovery completed.Please check %s for more details and %s for files **\n",GIIS_LOG_FILE,RESTORE_DIR);
+
 exit(0);
 }else if (arguments.flag == 5){
 just_list=1;
@@ -238,14 +260,17 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 {
 	int fd, nread,i;
 	char buf[BUF_SIZE];
+	char pathbuf[BUF_SIZE];
 	struct linux_dirent *d;
 	struct ext2_inode inode,*in;
 	int bpos;
 	char d_type;
 	char dir[512]={0};
-	char	*pathname=NULL;
+	char	*pathname=NULL,tmpname[256];
 	extern int max_dir_depth,update,update_time;
 	in = &inode;
+	struct partition_info *current=pinfo;
+	int retval=0;
 
 	memset(dir,'\0',512);
 	strcpy(dir,gargv);
@@ -256,7 +281,14 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 	handle_error("open");
 	}
 
-	printf("\n Parsing directory  : %s",dir);
+	printf("\n Parsing directory and chdir : %s",dir);
+	chdir(dir);
+	if (multi_partition){
+		//few more things to worry 
+		  pathname=dir;
+		  giis_ext4_validate_path_device(current_fs,pathname);
+						  
+	}
 
 
 if(depth < max_dir_depth){
@@ -306,6 +338,15 @@ if(depth < max_dir_depth){
 						//convert inode into absoulte pathname
 						pathname=NULL;
 						ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
+						if(pathname==NULL)
+							pathname=realpath(d->d_name,pathbuf);
+					//TODO : If multi-partition - prepend- mnt_dir with pathname
+						if(multi_partition){
+							strcpy(tmpname,device_mnt_dir);
+							strcat(tmpname,pathname);
+							pathname=NULL;
+							pathname=tmpname;
+						}	
 						giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
 						 }
 
@@ -317,6 +358,16 @@ if(depth < max_dir_depth){
 					//convert inode into absoulte pathname
 					pathname=NULL;
 					ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
+					if(pathname==NULL)
+						pathname=realpath(d->d_name,pathbuf);
+
+					//TODO : If multi-partition - prepend- mnt_dir with pathname
+						if(multi_partition){
+							strcpy(tmpname,device_mnt_dir);
+							strcat(tmpname,pathname);
+							pathname=NULL;
+							pathname=tmpname;
+						}	
 					giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
 					}
 				//parse this directory, if and only if mtime or ctime changed.
@@ -325,6 +376,7 @@ if(depth < max_dir_depth){
 			}else
 			{
 				if (d_type == DT_REG){
+			
 					if (update==TRUE) { 
 						if(in->i_mtime > (time(0)-(update_time*60))) {
 						//check whether this entry already exists
@@ -332,6 +384,16 @@ if(depth < max_dir_depth){
 						//convert inode into absoulte pathname
 						pathname=NULL;
 						ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
+		//TODO : If multi-partition - prepend- mnt_dir with pathname
+						if(pathname==NULL)
+							pathname=realpath(d->d_name,pathbuf);
+					//TODO : If multi-partition - prepend- mnt_dir with pathname
+						if(multi_partition){
+							strcpy(tmpname,device_mnt_dir);
+							strcat(tmpname,pathname);
+							pathname=NULL;
+							pathname=tmpname;
+						}	
 						giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
 						 }
 
@@ -343,6 +405,17 @@ if(depth < max_dir_depth){
 					//convert inode into absoulte pathname
 					pathname=NULL;
 					ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
+					if(pathname==NULL)
+						pathname=realpath(d->d_name,pathbuf);
+
+					//TODO : If multi-partition - prepend- mnt_dir with pathname
+					if(multi_partition){
+						strcpy(tmpname,device_mnt_dir);
+						strcat(tmpname,pathname);
+						pathname=NULL;
+						pathname=tmpname;
+					}
+					printf("\n passing ~~~~~~~~~> %s",pathname);
 					giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
 					}
 			
@@ -385,7 +458,13 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 			total_blks=fi->extents[i];
 			blk=fi->starting_block[i];
 			while(total_blks > 0){		
-				retval = io_channel_read_blk(current_fs->io, blk, 1, buf);
+				//test whether blk is indeed free
+				//if (ext2fs_test_block_bitmap2(current_fs->block_map,block))
+//						printf("Block %llu marked in use\n", block);
+
+
+				retval = io_channel_read_blk64(current_fs->io, blk, 1, buf);
+
 					if (retval) {
 					handle_error("giis_ext4_dump_data_blocks::io_channel_read_blk:Can't read from block");
 					return;
@@ -524,9 +603,8 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 /* giis_ext4_recover_all : Undelete all files from all users */
 int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 	extern sqlite3 *conn;
-	sqlite3_stmt    *res,*Stmt;
+	sqlite3_stmt    *res,*res1,*Stmt;
 	int     error = 0,uid=-1;
-	int     rec_count = 0;
 	const char      *errMSG;
 	const char      *tail;
 	char  *errmsg,*buf;
@@ -586,8 +664,18 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 
 		if (error != SQLITE_OK) {
 		handle_error("No matching record found.");
-		}
+		}else{
 		printf("\n Verifing inode:");
+		giis_ext4_recover_all_helper(current_fs,res,&inode);
+	}
+		sqlite3_finalize(res);
+		giis_ext4_close_db();
+}
+int giis_ext4_recover_all_helper(ext2_filsys current_fs,sqlite3_stmt *res,struct ext2_inode *in){
+	struct ext2_inode inode;
+		int     rec_count = 0,error=0;
+		int i,total_blks;
+		unsigned long blk;
 		while (sqlite3_step(res) == SQLITE_ROW) {
 		
 			fi->fname=sqlite3_column_text(res, 0);
@@ -618,9 +706,39 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 			fi->group=sqlite3_column_int(res, 14);
 			fi->md5sum=sqlite3_column_text(res, 15);
 
+			/* Verify  fpath's device_mnt_dir is valid */
+			giis_ext4_validate_path_device(current_fs,fi->fpath);
+			
+			assert(current_fs->device_name != NULL && current_fs->device_name != " ");
+			/* testi */
+			if (ext2fs_test_inode_bitmap2(current_fs->inode_map,fi->inode_num)){
+				printf("Inode %u is marked in use\n", inode);
+				inode.i_links_count=1;
+			}else
 			ext2fs_read_inode(current_fs,fi->inode_num,&inode);
 
-			if (in->i_links_count ==0 && S_ISREG(fi->mode)){
+			if (inode.i_links_count ==0 && S_ISREG(fi->mode)){
+				/* *********************************/
+				i=0;
+				while(fi->extents[i] && i < 4 ){
+					/* Set extents length and start block */
+					total_blks=fi->extents[i];
+					blk=fi->starting_block[i];
+						//test whether blk is indeed free
+						while(total_blks > 0){		
+						if (ext2fs_test_block_bitmap2(current_fs->block_map,blk)){
+						printf("Block %llu marked in use\n", blk);
+						sleep(1);
+						goto out;
+						}
+
+						blk++;
+						total_blks --;
+					}
+				i++;
+				}
+				 
+				 /********************************/
 				if(date_mode !=-1){
 				if((giis_ext4_check_ddate(in)==1) && (fi->starting_block[0])){
 					if(!just_list)
@@ -637,16 +755,43 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 				}
 			} 
 
-		
+out:	
 		rec_count++;
 	}
 
 
-		error = sqlite3_reset(res);assert(error == SQLITE_OK);
-		sqlite3_finalize(res);
-		giis_ext4_close_db();
-
 }
+void giis_ext4_validate_path_device(ext2_filsys current_fs,char *fpath){
+	char pathname[128]={'\0'};
+	int retval=0;
+	printf("\n Verifing path and device:");
+	struct partition_info *current=pinfo;
+	strcpy(pathname,fpath);
+						while(current!=NULL){
+							if (strcmp(current->mntdir,"/")){
+							if( !strncmp(pathname,current->mntdir,strlen(current->mntdir))){
+								//if device already not in-use set it
+								if(strcmp(device,current->device)){
+								strcpy(device,current->device);//set appropriate device name
+								strcpy(device_mnt_dir,current->mntdir);
+								//close device and reopen -
+								ext2fs_close(current_fs);
+								current_fs=NULL;
+							retval = ext2fs_open(device, EXT2_FLAG_SOFTSUPP_FEATURES | EXT2_FLAG_RW,0,0,unix_io_manager, &current_fs);
+									if (retval) {
+										current_fs = NULL;		
+										printf("\n ->%s",device);
+										handle_error("Error while opening filesystem.");
+									}
+
+								EXT2_BLOCK_SIZE=current_fs->blocksize;
+								}
+							}
+						}
+							current=current->next;
+						} 
+}
+		//////////////////////////////////////////////////
 int giis_ext4_write_into_file(struct giis_recovered_file_info *fi,unsigned char buf[EXT2_BLOCK_SIZE]){
 int fp;
 int retval=0;
@@ -690,9 +835,7 @@ char *wordptr=NULL;
 int bytes=180;
 fd = fopen ("/etc/mtab", "r");
 if (fd == NULL)
-{
 handle_error("giis_ext4_search4fs::unable to open /etc/mtab");
-}
 
 	while (fd !=NULL){
 		if (getline(&line,&bytes,fd) == -1){
@@ -709,6 +852,47 @@ handle_error("giis_ext4_search4fs::unable to open /etc/mtab");
 		}			
 	}
 return -1;
+}
+/* list all ext4 devices */ 
+int giis_ext4_search4fs_all(struct partition_info** pinfo){
+	FILE *fp;
+	struct mntent mnt;
+	struct mntent *pmnt;
+	char work[MAXPATHLEN];
+	char mntdir[MAXPATHLEN];
+	extern int multi_partition;
+	struct partition_info *newinfo=NULL;
+
+	fp = setmntent(MOUNTED, "r"); 
+	if(fp == NULL)
+		handle_error("giis_ext4_search4fs_all::unable to open /etc/mtab");
+
+	while((pmnt = getmntent_r(fp, &mnt, work, MAXPATHLEN)) != NULL)
+	{
+		if(!strcmp(mnt.mnt_type,"ext4")){
+
+			if(strcmp(mnt.mnt_dir,"/"))
+				multi_partition=TRUE;
+
+			//add to pinfo-list
+			newinfo=malloc(sizeof(struct partition_info));
+			strcpy(newinfo->device,mnt.mnt_fsname);
+			strcpy(newinfo->mntdir,mnt.mnt_dir);
+			newinfo->next=*pinfo;	
+			*pinfo=newinfo;
+
+		}
+	}
+	endmntent(fp);
+	printf("\n ==> %d =>",multi_partition);
+	return 0;
+}
+void giis_ext4_device_list(struct partition_info *current){
+
+	while(current!=NULL){
+		printf("\ndevice:--> %s mntdir:-->%s\n",current->device,current->mntdir);
+		current=current->next;
+	}
 }
 /* log file */
 int giis_ext4_log_mesg(char *mesg,char *md5sum,char *new_md5sum){
