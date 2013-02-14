@@ -1,6 +1,8 @@
 Additional contributors to giis-ext4.
 
 Thanks to:
+	* Raghvendra Yadav <raghavmnnit@gmail.com> for patch for parse mtab cleanly.
+
 	* Tony Su <tonysu@su-networking.com> for helping to resolve issues in OpenSUSE.
 
 	* Elija (http://www.thefifthcontinent) for alpha-testingi,bug reports/test cases and preparing  INSTALL file for Ubuntu/Fedora users.

@@ -122,7 +122,7 @@ char cwd[40];
 int multi_partition=FALSE;
 char device[75];
 char device_mnt_dir[75];
-const char *argp_program_version = "giis-ext4 1.0 (06-11-2012) ";
+const char *argp_program_version = "giis-ext4 1.1 (14-02-2013) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
 
