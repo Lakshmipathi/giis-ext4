@@ -336,6 +336,7 @@ if(depth < max_dir_depth){
 						//check whether this entry already exists
 						 if(giis_ext4_sqlite_verify_record(d->d_ino)){
 						//convert inode into absoulte pathname
+						free(pathname);
 						pathname=NULL;
 						ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
 						if(pathname==NULL)
@@ -344,6 +345,7 @@ if(depth < max_dir_depth){
 						if(multi_partition){
 							strcpy(tmpname,device_mnt_dir);
 							strcat(tmpname,pathname);
+							free(pathname);
 							pathname=NULL;
 							pathname=tmpname;
 						}	
@@ -365,6 +367,7 @@ if(depth < max_dir_depth){
 						if(multi_partition){
 							strcpy(tmpname,device_mnt_dir);
 							strcat(tmpname,pathname);
+							free(pathname);
 							pathname=NULL;
 							pathname=tmpname;
 						}	
@@ -382,6 +385,7 @@ if(depth < max_dir_depth){
 						//check whether this entry already exists
 						 if(giis_ext4_sqlite_verify_record(d->d_ino)){
 						//convert inode into absoulte pathname
+						free(pathname);
 						pathname=NULL;
 						ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
 		//TODO : If multi-partition - prepend- mnt_dir with pathname
@@ -391,6 +395,7 @@ if(depth < max_dir_depth){
 						if(multi_partition){
 							strcpy(tmpname,device_mnt_dir);
 							strcat(tmpname,pathname);
+							free(pathname);
 							pathname=NULL;
 							pathname=tmpname;
 						}	
@@ -412,10 +417,10 @@ if(depth < max_dir_depth){
 					if(multi_partition){
 						strcpy(tmpname,device_mnt_dir);
 						strcat(tmpname,pathname);
+						free(pathname);
 						pathname=NULL;
 						pathname=tmpname;
 					}
-					printf("\n passing ~~~~~~~~~> %s",pathname);
 					giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
 					}
 			
@@ -764,7 +769,7 @@ out:
 void giis_ext4_validate_path_device(ext2_filsys current_fs,char *fpath){
 	char pathname[128]={'\0'};
 	int retval=0;
-	printf("\n Verifing path and device:");
+	//printf("\n Verifing path and device:");
 	struct partition_info *current=pinfo;
 	strcpy(pathname,fpath);
 						while(current!=NULL){
@@ -832,14 +837,19 @@ int giis_ext4_search4fs (char *device)
 FILE *fd;
 char *line=NULL;
 char *wordptr=NULL;
-int bytes=180;
+size_t bytes=0;
+ssize_t read=0;
 fd = fopen ("/etc/mtab", "r");
-if (fd == NULL)
+if (fd == NULL){
+close(fd);
 handle_error("giis_ext4_search4fs::unable to open /etc/mtab");
+}
 
 	while (fd !=NULL){
-		if (getline(&line,&bytes,fd) == -1){
+		if (read = (getline(&line,&bytes,fd) == -1)){
 			//puts("EOF");
+			free(line);
+			close(fd);
 			return -1;
 		}
 
@@ -847,10 +857,14 @@ handle_error("giis_ext4_search4fs::unable to open /etc/mtab");
 			wordptr = strtok(line," "); 
 			strcpy(device,wordptr);
 			printf("\n Device Found : %s",device);
+			free(line);
+			close(fd);
 			return 1;
 			
 		}			
 	}
+free(line);
+close(fd);
 return -1;
 }
 /* list all ext4 devices */ 
