@@ -1,4 +1,4 @@
-Things TODO for giis-ext4 1.2 : (for next version)
+Things TODO for giis-ext4 1.3 : (for next version)
 
 set correct file size instead of multiple of block_size - done
 collect sample data or use md5sum  to check file integrity - done

@@ -1,3 +1,7 @@
+2013-08-10 Lakshmipathi.G<lakshmipathi.g@giis.co.in>
+       * Release of giis-ext4 1.2
+			- Fix memory leak reported by valgrind.
+..............................................................................
 2013-02-14 Lakshmipathi.G<lakshmipathi.g@giis.co.in>
        * Release of giis-ext4 1.1
        			- Supports multiple partitions.
