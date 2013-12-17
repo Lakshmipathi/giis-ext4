@@ -451,6 +451,7 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 	char file_location[512]={0};
 
 	char md5_cmd[512],md5sum[34];
+	extern char md5_cmd2[512];
 	FILE *pf;
 
 		is_file_already_exists=0;
@@ -498,8 +499,8 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		//Recompute md5  of recovered file
 		memset(md5_cmd,'\0',512);
 		sprintf(md5_cmd,"md5sum %s",file_location);
-	
-		pf=popen(md5_cmd,"r");
+		validate_cmd(md5_cmd);	
+		pf=popen(md5_cmd2,"r");
 		if(!pf){
 		fprintf(stderr,"Could not open pipe");
 		return ;
@@ -517,6 +518,23 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		
 return 1;
 }
+char md5_cmd2[512];
+void validate_cmd(char md5_cmd[512]){
+	extern char md5_cmd2[512];
+	memset(md5_cmd2,'\0',512);
+	int i=0,j=0;
+	while(i<strlen(md5_cmd)){
+		if (md5_cmd[i] != ' ' && md5_cmd[i]!='/'){
+			md5_cmd2[j++] = md5_cmd[i++];
+		}
+		else{
+			if ( i != 6)
+				md5_cmd2[j++] = '\\';
+			md5_cmd2[j++] = md5_cmd[i++];
+		}
+	}
+	md5_cmd2[j]='\0';
+}
 int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *inode,unsigned long parent_inode,int depth,char cwd[]){
 	extern sqlite3 *conn;
 	sqlite3_stmt    *Stmt;
@@ -526,6 +544,7 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 	const char *zLeftover;
 	time_t result;					/* time n date of when this record updated into db */
 	char md5_cmd[512],md5sum[34];
+	extern char md5_cmd2[512];
 	FILE *pf;
 		
 		
@@ -574,8 +593,8 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 	
 	memset(md5_cmd,'\0',512);
 	sprintf(md5_cmd,"md5sum %s",cwd);
-	
-	pf=popen(md5_cmd,"r");
+	validate_cmd(md5_cmd);
+	pf=popen(md5_cmd2,"r");
 	if(!pf){
 		fprintf(stderr,"Could not open pipe");
 		return ;
