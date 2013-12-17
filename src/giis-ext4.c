@@ -1,7 +1,7 @@
 /*
 * /giis/giis-ext4.c-Ext4 Undelete Tool.
 *
-* Copyright (C) 2010,2011,2012 Lakshmipathi.G <lakshmipathi.g@giis.co.in>
+* Copyright (C) 2010,2011,2012,2013 Lakshmipathi.G <lakshmipathi.g@giis.co.in>
 * Visit www.giis.co.in for manuals or docs.
 */
 
@@ -122,7 +122,7 @@ char cwd[40];
 int multi_partition=FALSE;
 char device[75];
 char device_mnt_dir[75];
-const char *argp_program_version = "giis-ext4 1.2 (10-08-2013) ";
+const char *argp_program_version = "giis-ext4 1.3 (17-12-2013) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
 
@@ -524,7 +524,7 @@ void validate_cmd(char md5_cmd[512]){
 	memset(md5_cmd2,'\0',512);
 	int i=0,j=0;
 	while(i<strlen(md5_cmd)){
-		if (md5_cmd[i] != ' ' && md5_cmd[i]!='/'){
+		if (md5_cmd[i] != ' ' && md5_cmd[i]!='/' && md5_cmd[i]!='(' && md5_cmd[i]!=')'){
 			md5_cmd2[j++] = md5_cmd[i++];
 		}
 		else{

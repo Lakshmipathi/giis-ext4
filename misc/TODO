@@ -8,7 +8,7 @@ File deleted  with same name from two different directories.
 add lock - so that there won't be two instance of giis operates on db simultaneously.-done
 ->merge giis and giis-ext4 
 ==============
-Fix following bug @ 578:
+Fix following bug @ 578: [FIXED]
 ------<snip>---
 576		sprintf(md5_cmd,"md5sum %s",cwd);
 (gdb) p md5_cmd
@@ -18,3 +18,4 @@ $2 = '\000' <repeats 511 times>
 (gdb) p md5_cmd
 $3 = "md5sum /home/laks/Music/01 - Lal Meri.mp3", '\000' <repeats 470 times>
 -----<\snip>----
+
