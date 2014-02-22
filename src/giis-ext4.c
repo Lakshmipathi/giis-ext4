@@ -282,7 +282,10 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 	}
 
 	printf("\n Parsing directory and chdir : %s",dir);
-	chdir(dir);
+	if(chdir(dir)<0){
+		printf("Changing to dir %s from %s failed",dir,get_current_dir_name());
+		handle_error("Aborting");
+	}
 	if (multi_partition){
 		//few more things to worry 
 		pathname=dir;
@@ -329,14 +332,13 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 						}
 						printf("\n\tupdatedir : %s",d->d_name);
 					}
-					chdir(dir);
 					//If its directory insert the record too.
 					if (update==TRUE) { 
 						//	if(in->i_mtime > (time(0)-(update_time*60))) {
 						//check whether this entry already exists
 						if(giis_ext4_sqlite_verify_record(d->d_ino)){
 							//convert inode into absoulte pathname
-							free(pathname);
+							//free(pathname);
 							pathname=NULL;
 							ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
 							if(pathname==NULL)
@@ -432,7 +434,10 @@ skipdir:
 			}
 		}
 	}
-	chdir("..");
+	if(chdir("..")<0){
+		printf("Changing to dir .. from %s failed",get_current_dir_name());
+		handle_error("Aborting");
+	}
 	close(fd);			
 
 	return 0;
