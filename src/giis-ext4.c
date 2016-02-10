@@ -1,7 +1,7 @@
 /*
 * /giis/giis-ext4.c-Ext4 Undelete Tool.
 *
-* Copyright (C) 2010,2011,2012,2013 Lakshmipathi.G <lakshmipathi.g@giis.co.in>
+* Copyright (C) 2010-2016 Lakshmipathi.G <lakshmipathi.g@giis.co.in>
 * Visit www.giis.co.in for manuals or docs.
 */
 
@@ -22,24 +22,27 @@
 #include <sqlite3.h>
 #include <assert.h>    /* assert */
 #include <libgen.h>
+
 /* argp */
 #include <argp.h>
+
 /* Parse mtab entries */
 #include <mntent.h>
 
 
 /* SQL statements used in this program */
-#define SQL_STMT_GET_ALL "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum from giistable "
-#define SQL_STMT_GET_USR "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum from giistable where owner=?  "
-#define SQL_STMT_GET_FTYPE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum from giistable where name like ? "
-#define SQL_STMT_GET_FILE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum from giistable where name=?  "
+#define SQL_STMT_GET_ALL "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable "
+#define SQL_STMT_GET_ALL_FILES "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where ftype=1 and mntedon=?"
+#define SQL_STMT_GET_USR "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where owner=?  "
+#define SQL_STMT_GET_FTYPE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where name like ? "
+#define SQL_STMT_GET_FILE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where name=?  "
 #define SQL_STMT_GET_DIRNAMES "select * from giisheader"
 #define SQL_STMT_VERIFY_INODE "select * from giistable where inode=?"
 
-#define SQL_STMT_CREATE_HEADER "create table giisheader(max_depth int,update_time int,device_name varchar(100),protected_dir1 varchar(512),protected_dir2 varchar(512),protected_dir3 varchar(512),protected_dir4 varchar(512) NULL,protected_dir5 varchar(512),protected_dir6 varchar(512),protected_dir7 varchar(512));"
-#define SQL_STMT_CREATE_TABLE "create table giistable(name varchar(256),inode long ,parent_inode long,mode int,owner int,fflags int,fsize int,ftype varchar(5),fpath varchar(512),gid int,depth int, ext1 int,blk1 long,ext2 int,blk2 long,ext3 int,blk3 long,ext4 int,blk4 long,md5sum varchar(34));"
-#define SQL_STMT_INSERT_TABLE "insert into giistable values(?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?,?)"
-#define SQL_STMT_INSERT_HEADER "insert into giisheader values(?,?,?,?,?,?,?,?,?,?)"
+#define SQL_STMT_CREATE_HEADER "create table giisheader(max_depth int,update_time int,device_name varchar(100),mntedon varchar(512),protected_dir1 varchar(512));"
+#define SQL_STMT_CREATE_TABLE "create table giistable(name varchar(256),inode long ,parent_inode long,mode int,owner int,fflags int,fsize int,ftype varchar(5),fpath varchar(512),gid int,depth int, ext1 int,blk1 long,ext2 int,blk2 long,ext3 int,blk3 long,ext4 int,blk4 long,md5sum varchar(34),mntedon varchar(34));"
+#define SQL_STMT_INSERT_TABLE "insert into giistable values(?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?,?,?)"
+#define SQL_STMT_INSERT_HEADER "insert into giisheader values(?,?,?,?,?)"
 
 	/* dirs */
 #define GIISDIR "/usr/local/giis"
@@ -77,13 +80,15 @@ struct giis_recovered_file_info{
 	int owner;
 	int group;
 	char *md5sum;
+	char *mntedon;
 }s_giis_recovered_file_info,*fi;
 
 struct giis_protected_dir_info{
 	int max_depth; 
 	int update_time;
 	char *device_name;
-	char *protected_dir[7];
+	char *mntedon;
+	char *protected_dir;
 }s_giis_protected_dir_info,*di;
 
 
@@ -92,7 +97,7 @@ struct arguments
 	int  flag;		    /* 1-install 2-update 3-recover 4-uninstall*/
 };
 
-
+#ifndef ANDROID 
 static struct argp_option options[] =
 {  
 	{"install",   'i', 0, 0,"Will start the installation process."},
@@ -102,6 +107,8 @@ static struct argp_option options[] =
 	{"list",'l',0,0,"List deleted files"},
 	{0}
 };
+#endif
+
 
 struct partition_info {
 	char device[75];
@@ -127,35 +134,42 @@ const char *argp_program_bug_address = "<http://groups.google.com/group/giis-use
 
 
 /* Functions involved. */
+#ifndef ANDROID
 static error_t parse_opt (int, char *, struct argp_state *); 
-int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys);
+#else
+void printusage();
+#endif
+
+int  giis_ext4_parse_dir(int, char *,unsigned long,ext2_filsys,char *);
 int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *,ext2_filsys);
 int giis_ext4_list_file_details(struct giis_recovered_file_info *,ext2_filsys);
-int giis_ext4_sqlite_insert_record(struct linux_dirent *,struct ext2_inode *,unsigned long,int,char []);
-int giis_ext4_recover_all(ext2_filsys ,int );
+int giis_ext4_sqlite_insert_record(struct linux_dirent *,struct ext2_inode *,unsigned long,int,char [],char *);
+int giis_ext4_recover_all(int );
 int giis_ext4_write_into_file(struct giis_recovered_file_info *,unsigned char []);
 int giis_ext4_search4fs (char *);
 int giis_ext4_log_mesg(char *,char *,char *);
 int giis_ext4_get_date();
 int giis_ext4_check_ddate(struct ext2_inode *);
-int giis_ext4_creat_tables(char *);
-int giis_ext4_update_dirs(ext2_filsys );
+int giis_ext4_creat_tables(struct partition_info *,char *);
+int giis_ext4_update_dirs();
 unsigned long getinodenumber(char *);
 void giis_ext4_open_db();
 void giis_ext4_close_db();
-int giis_ext4_sqlite_verify_record(unsigned long);
+int giis_ext4_sqlite_new_record(unsigned long);
 int giis_ext4_uninstall(void);
 static int giis_ext4_unlock_db(int fd ,int offset,int len);
 static int giis_ext4_lock_db(int fd ,int offset,int len);
 int giis_ext4_search4fs_all(struct partition_info** );
 void giis_ext4_device_list(struct partition_info* );
 int giis_ext4_recover_all_helper(ext2_filsys,sqlite3_stmt *,struct ext2_inode *);
-void giis_ext4_validate_path_device(ext2_filsys,char *);
+ext2_filsys giis_ext4_validate_path_device(ext2_filsys,char *);
+ext2_filsys giis_ext4_fetch_current_fs(char *);
+void validate_cmd(char md5_cmd[]);
 
 static char args_doc[] = "";
 static char doc[] = "giis-ext4 - An undelete tool for ext4 file system.(http://www.giis.co.in)";
+#ifndef ANDROID
 static struct argp argp = {options, parse_opt, args_doc, doc};
-
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state)
 {
@@ -183,21 +197,88 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 	}
 	return 0;
 }
+#endif
+
+ext2_filsys giis_ext4_fetch_current_fs(char *device){
+
+        ext2_filsys     current_fs = NULL;
+        int  open_flags = EXT2_FLAG_SOFTSUPP_FEATURES | EXT2_FLAG_RW;
+   	blk_t superblock=0;
+        blk_t blocksize=0;
+	int retval=0;
+
+	retval = ext2fs_open(device, open_flags, superblock, blocksize,unix_io_manager, &current_fs);
+        if (retval) {
+                current_fs = NULL;
+                handle_error("Error while opening filesystem.");
+        }
+
+        EXT2_BLOCK_SIZE=current_fs->blocksize;
+	retval = ext2fs_read_inode_bitmap(current_fs);
+        if (retval) {
+                current_fs = NULL;
+                handle_error("Error while reading inode bitmap.");
+        }
+	retval = ext2fs_read_block_bitmap(current_fs);
+        if (retval) {
+                current_fs = NULL;
+                handle_error("Error while reading block bitmap.");
+        }
+	assert(current_fs->device_name != NULL && current_fs->device_name != " ");
+	assert(current_fs->inode_map != NULL && current_fs->block_map != NULL);
+	return current_fs;
+}
+
+
+void print_usage(){
+	printf("\n giis-ext4 v.08 usage giis-ext4 [option] - possible options are:");
+	printf("\n-g, --recover              Undelete/recover files");
+	printf("\n-i, --install              Will start the installation process.");
+	printf("\n-l, --list                 List deleted files");
+	printf("\n-q, --uninstall            Uninstalls giis-ext4");
+	printf("\n-u, --update               Update to reflect current File system state\n");
+	exit(0);
+}
 
 
 int main(int argc,char *argv[]){
-	ext2_filsys	current_fs = NULL;
 	extern char device[75];
-	int  open_flags = EXT2_FLAG_SOFTSUPP_FEATURES | EXT2_FLAG_RW;
-	blk_t superblock=0;
-	blk_t blocksize=0;
 	int retval=0;
 	int i=0;
 	int ans=0;
 	struct arguments arguments;
+	int getopt_key=0;
 	extern struct partition_info *pinfo;
 
+
+	#ifndef ANDROID
 	argp_parse (&argp, argc, argv, 0, 0, &arguments);
+    	#else
+	while ((getopt_key = getopt(argc,argv,"iugql")) != -1)
+	switch (getopt_key){
+		case 'i':
+			arguments.flag=1;
+			break;
+		case 'u':
+			arguments.flag=2;
+			break;
+		case 'g':
+			arguments.flag=3;
+			break;
+		case 'q':
+			arguments.flag=4;
+			break;
+		case 'l':
+			arguments.flag=5;
+			break;
+		default:
+			print_usage();
+
+	}
+	if ( !(arguments.flag>0 && arguments.flag<6))
+	   print_usage();
+	#endif
+        
 	if ( !(arguments.flag>0 && arguments.flag<6))
 		handle_error("For usage type : giis-ext4 --help");
 
@@ -212,51 +293,42 @@ int main(int argc,char *argv[]){
 		handle_error("Root File System not Found.Exiting.");
 	}	
 	giis_ext4_device_list(pinfo);
-	//exit(0);
 
 	struct partition_info *current=pinfo;
-	retval = ext2fs_open(device, open_flags, superblock, blocksize,unix_io_manager, &current_fs);
-	if (retval) {
-		current_fs = NULL;
-		handle_error("Error while opening filesystem.");
-	}
-
-	EXT2_BLOCK_SIZE=current_fs->blocksize;
 
 	if(arguments.flag == 1){
-		printf("\n giis : Taking snapshot of current File system \n");
+		fprintf(stdout,"\n giis : Taking snapshot of current File system \n");
 		update=FALSE;
-		giis_ext4_creat_tables(device);
-		giis_ext4_update_dirs(current_fs);
+		giis_ext4_creat_tables(current,device);
+		giis_ext4_update_dirs();
 
-		printf("\n *Please add following entry into your /etc/crontab file for auto update");
-		printf("\n */%d * * * * root /usr/bin/giis-ext4 -u > /dev/null ",update_time);
-		printf("\n giis-ext4:Installation is complete.\n"); 
+		fprintf(stdout,"\n *Please add following entry into your /etc/crontab file for auto update");
+		fprintf(stdout,"\n */%d * * * * root /usr/bin/giis-ext4 -u > /dev/null ",update_time);
+		fprintf(stdout,"\n giis-ext4:Installation is complete.\n"); 
 	}else if (arguments.flag == 2){
-		printf("\n giis : Updating snapshot of current File system \n");
+		fprintf(stdout,"\n giis : Updating snapshot of current File system \n");
 		update=TRUE;
 		giis_ext4_open_db();
-		giis_ext4_update_dirs(current_fs);
-		printf("\n giis-ext4:Update is complete.\n"); 
+		giis_ext4_update_dirs();
+		fprintf(stdout,"\n giis-ext4:Update is complete.\n"); 
 	}else if (arguments.flag == 3){
-		printf("\n press 1: get all user files");printf("\n press 2: get specific user files");
-		printf("\n press 3: get specific file type");printf("\n press 4: get specific file");
-		printf("\n press 5: get it by deleted date");printf("\n Enter your option:");
+		fprintf(stdout,"\n press 1: get all user files");fprintf(stdout,"\n press 2: get specific user files");
+		fprintf(stdout,"\n press 3: get specific file type");fprintf(stdout,"\n press 4: get specific file");
+		fprintf(stdout,"\n press 5: get it by deleted date");fprintf(stdout,"\n Enter your option:");
 		scanf("%d",&ans);
 
-		giis_ext4_recover_all(current_fs,ans);
-		printf("\n\n **giis-ext4 : Recovery completed.Please check %s for more details and %s for files **\n",GIIS_LOG_FILE,RESTORE_DIR);
+		giis_ext4_recover_all(ans);
+		fprintf(stdout,"\n\n **giis-ext4 : Recovery completed.Please check %s for more details and %s for files **\n",GIIS_LOG_FILE,RESTORE_DIR);
 
 		exit(0);
 	}else if (arguments.flag == 5){
 		just_list=1;
-		giis_ext4_recover_all(current_fs,1);
+		giis_ext4_recover_all(1);
 	}
-	ext2fs_close(current_fs);
 	return 1;
 }
 
-int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_filsys current_fs)
+int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_filsys current_fs,char *mnted)
 {
 	int fd, nread,i;
 	char buf[BUF_SIZE];
@@ -266,11 +338,12 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 	int bpos;
 	char d_type;
 	char dir[512]={0};
-	char	*pathname=NULL,tmpname[256];
+	char *pathname=NULL,tmpname[256];
 	extern int max_dir_depth,update,update_time;
 	in = &inode;
 	struct partition_info *current=pinfo;
 	int retval=0;
+	int new_record = 0;
 
 	memset(dir,'\0',512);
 	strcpy(dir,gargv);
@@ -281,15 +354,14 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 		handle_error("open");
 	}
 
-	printf("\n Parsing directory and chdir : %s",dir);
+	fprintf(stdout,"\n Parsing directory and chdir : %s",dir);
 	if(chdir(dir)<0){
-		printf("Changing to dir %s from %s failed",dir,get_current_dir_name());
+		fprintf(stderr,"Changing to dir %s from %s failed",dir,get_current_dir_name());
 		handle_error("Aborting");
 	}
 	if (multi_partition){
-		//few more things to worry 
 		pathname=dir;
-		giis_ext4_validate_path_device(current_fs,pathname);
+		current_fs=giis_ext4_validate_path_device(current_fs,pathname);
 
 	}
 
@@ -311,7 +383,8 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 				//read inode stats
 				ext2fs_read_inode(current_fs,d->d_ino,in);
 				//inode-stats ends
-				if(d_type == DT_DIR){
+
+				if(d_type == DT_DIR){ // type: dir
 					//skip system files too
 					if(strcmp(".",d->d_name)==0 || strcmp("..",d->d_name)==0 ){
 						bpos += d->d_reclen;
@@ -322,39 +395,32 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 						bpos += d->d_reclen;
 						continue;
 					}
-					//printf("\n -->checking dir:%s -mtime=%u  ctime=%u",d->d_name,in->i_mtime,in->i_ctime);
-					if(giis_ext4_sqlite_verify_record_for_directory(d->d_ino,in->i_mtime,in->i_ctime)){
-						//if time-stamp are same - If its update && its not new directory - then skipdir
-						//if time-stamp are - during install - don't skipdir.
-						if(update==TRUE && (giis_ext4_sqlite_verify_record(d->d_ino)==0)){
-							printf("\n\tskipdir   :  %s",d->d_name);
+					new_record = giis_ext4_sqlite_new_record(d->d_ino);
+
+					if(giis_ext4_sqlite_dir_ctime_mtime_match(d->d_ino,in->i_mtime,in->i_ctime)){
+						if(update==TRUE && (!new_record)){
+							fprintf(stdout,"\n\tskipdir   :  %s",d->d_name);
 							goto skipdir;
 						}
-						printf("\n\tupdatedir : %s",d->d_name);
+						fprintf(stdout,"\n\tupdatedir : %s",d->d_name);
 					}
 					//If its directory insert the record too.
 					if (update==TRUE) { 
-						//	if(in->i_mtime > (time(0)-(update_time*60))) {
 						//check whether this entry already exists
-						if(giis_ext4_sqlite_verify_record(d->d_ino)){
-							//convert inode into absoulte pathname
-							//free(pathname);
+						if(new_record){
 							pathname=NULL;
 							ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
 							if(pathname==NULL)
 								pathname=realpath(d->d_name,pathbuf);
-							//TODO : If multi-partition - prepend- mnt_dir with pathname
-							if(multi_partition){
-								strcpy(tmpname,device_mnt_dir);
+							if(multi_partition && (strlen(mnted)>2)){
+								strcpy(tmpname,mnted);
 								strcat(tmpname,pathname);
 								free(pathname);
 								pathname=NULL;
 								pathname=tmpname;
-							}	
-							giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
+							}
+							giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname,mnted);
 						}
-
-						//	}
 
 					}
 
@@ -365,18 +431,17 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 						if(pathname==NULL)
 							pathname=realpath(d->d_name,pathbuf);
 
-						//TODO : If multi-partition - prepend- mnt_dir with pathname
-						if(multi_partition){
-							strcpy(tmpname,device_mnt_dir);
+						if(multi_partition && (strlen(mnted)>2)){
+							strcpy(tmpname,mnted);
 							strcat(tmpname,pathname);
 							free(pathname);
 							pathname=NULL;
 							pathname=tmpname;
-						}	
-						giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
+						}
+						giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname,mnted);
 					}
 					//parse this directory, if and only if mtime or ctime changed.
-					giis_ext4_parse_dir(depth+1,d->d_name,d->d_ino,current_fs);
+					giis_ext4_parse_dir(depth+1,d->d_name,d->d_ino,current_fs,mnted);
 
 				}else
 				{
@@ -384,24 +449,21 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 
 						if (update==TRUE) { 
 							if(in->i_mtime > (time(0)-(update_time*60))) {
-								//check whether this entry already exists
-								if(giis_ext4_sqlite_verify_record(d->d_ino)){
+								if(new_record){
 									//convert inode into absoulte pathname
-									free(pathname);
 									pathname=NULL;
 									ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
-									//TODO : If multi-partition - prepend- mnt_dir with pathname
 									if(pathname==NULL)
 										pathname=realpath(d->d_name,pathbuf);
-									//TODO : If multi-partition - prepend- mnt_dir with pathname
-									if(multi_partition){
-										strcpy(tmpname,device_mnt_dir);
-										strcat(tmpname,pathname);
-										free(pathname);
-										pathname=NULL;
-										pathname=tmpname;
-									}	
-									giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
+									
+								if(multi_partition && (strlen(mnted)>2)){
+									strcpy(tmpname,mnted);
+									strcat(tmpname,pathname);
+									free(pathname);
+									pathname=NULL;
+									pathname=tmpname;
+								}
+									giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname,mnted);
 								}
 
 							}
@@ -409,21 +471,19 @@ int  giis_ext4_parse_dir(int depth, char *gargv,unsigned long parent_inode,ext2_
 						}
 
 						if(update==FALSE){
-							//convert inode into absoulte pathname
 							pathname=NULL;
 							ext2fs_get_pathname (current_fs, parent_inode, d->d_ino, &pathname);
 							if(pathname==NULL)
 								pathname=realpath(d->d_name,pathbuf);
 
-							//TODO : If multi-partition - prepend- mnt_dir with pathname
-							if(multi_partition){
-								strcpy(tmpname,device_mnt_dir);
+							if(multi_partition && (strlen(mnted)>2)){
+								strcpy(tmpname,mnted);
 								strcat(tmpname,pathname);
 								free(pathname);
 								pathname=NULL;
 								pathname=tmpname;
 							}
-							giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname);
+							giis_ext4_sqlite_insert_record(d,in,parent_inode,depth,pathname,mnted);
 						}
 
 					}	
@@ -435,7 +495,7 @@ skipdir:
 		}
 	}
 	if(chdir("..")<0){
-		printf("Changing to dir .. from %s failed",get_current_dir_name());
+		fprintf(stdout,"Changing to dir .. from %s failed",get_current_dir_name());
 		handle_error("Aborting");
 	}
 	close(fd);			
@@ -470,15 +530,14 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		blk=fi->starting_block[i];
 		while(total_blks > 0){		
 			//test whether blk is indeed free
-			//if (ext2fs_test_block_bitmap2(current_fs->block_map,block))
-			//						printf("Block %llu marked in use\n", block);
-
+			/* if (ext2fs_test_block_bitmap2(current_fs->block_map,block))
+				printf("Block %llu marked in use\n", block); */
 
 			retval = io_channel_read_blk64(current_fs->io, blk, 1, buf);
 
 			if (retval) {
 				handle_error("giis_ext4_dump_data_blocks::io_channel_read_blk:Can't read from block");
-				return;
+				return 1;
 			}
 			/* Write data into file */
 			retval=giis_ext4_write_into_file(fi,buf);
@@ -508,7 +567,7 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 	pf=popen(md5_cmd2,"r");
 	if(!pf){
 		fprintf(stderr,"Could not open pipe");
-		return ;
+		return 1;
 	}
 
 	//get data
@@ -540,7 +599,7 @@ void validate_cmd(char md5_cmd[512]){
 	}
 	md5_cmd2[j]='\0';
 }
-int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *inode,unsigned long parent_inode,int depth,char cwd[]){
+int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *inode,unsigned long parent_inode,int depth,char cwd[],char *mntedon){
 	extern sqlite3 *conn;
 	sqlite3_stmt    *Stmt;
 	int     error = 0;
@@ -565,7 +624,12 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 	error = sqlite3_bind_int(Stmt, 5,inode->i_uid);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 6,inode->i_flags);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int64(Stmt, 7,inode->i_size);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 8,inode->i_mode);assert(error == SQLITE_OK);
+	//ftype = 1 for reg.file  2-others
+	if (S_ISREG(inode->i_mode)){
+		error = sqlite3_bind_int(Stmt, 8,1);assert(error == SQLITE_OK);
+	}else{
+		error = sqlite3_bind_int(Stmt, 8,2);assert(error == SQLITE_OK);
+	}
 	error = sqlite3_bind_text(Stmt, 9,cwd, strlen(cwd), SQLITE_STATIC);assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 10,inode->i_gid);assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 11,depth);   assert(error == SQLITE_OK);
@@ -578,8 +642,6 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 	else{
 		error = sqlite3_bind_int64(Stmt, 13,inode->i_mtime);   assert(error == SQLITE_OK);
 	}
-
-
 	error = sqlite3_bind_int(Stmt, 14,inode->i_block[7]);   assert(error == SQLITE_OK);
 
 	if (S_ISREG(inode->i_mode)){
@@ -588,7 +650,6 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 	else{
 		error = sqlite3_bind_int64(Stmt, 15,inode->i_ctime);   assert(error == SQLITE_OK);
 	}
-
 	error = sqlite3_bind_int(Stmt, 16,inode->i_block[10]);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int64(Stmt, 17,inode->i_block[11]);   assert(error == SQLITE_OK);
 	error = sqlite3_bind_int(Stmt, 18,inode->i_block[13]);   assert(error == SQLITE_OK);
@@ -602,7 +663,7 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 		pf=popen(md5_cmd2,"r");
 		if(!pf){
 			fprintf(stderr,"Could not open pipe");
-			return ;
+			return 1;
 		}
 
 		//get data
@@ -612,13 +673,15 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 			fprintf(stderr," Error: close Failed.");
 		error = sqlite3_bind_text(Stmt, 20,md5sum, 34, SQLITE_STATIC);assert(error == SQLITE_OK);
 	}
+        error = sqlite3_bind_text(Stmt, 21,mntedon, strlen(mntedon), SQLITE_STATIC);assert(error == SQLITE_OK);
+
 
 
 up:
 	error = sqlite3_step(Stmt); 
 	if(error==SQLITE_BUSY){
-		printf("\n data base is busy wait 20 seconds");
-		printf("\n ->>%d<<-",error);
+		fprintf(stdout,"\n data base is busy wait 20 seconds");
+		fprintf(stdout,"\n ->>%d<<-",error);
 		sleep(20);
 		goto up;
 	}
@@ -627,15 +690,16 @@ up:
 	error = sqlite3_reset(Stmt);                assert(error == SQLITE_OK);
 	sqlite3_finalize(Stmt);
 
+return 0;
 }
 
 /* giis_ext4_recover_all : Undelete all files from all users */
-int giis_ext4_recover_all(ext2_filsys current_fs,int option){
+int giis_ext4_recover_all(int option){
 	extern sqlite3 *conn;
-	sqlite3_stmt    *res,*res1,*Stmt;
+	sqlite3_stmt    *res,*res1,*Stmt,*res_hdr;
 	int     error = 0,uid=-1;
 	const char      *errMSG;
-	const char      *tail;
+	const char      *tail,*tail_hdr;
 	char  *errmsg,*buf;
 	char *dbfile=SQLITE_DB_LOCATION;
 	const char *zLeftover;
@@ -643,62 +707,94 @@ int giis_ext4_recover_all(ext2_filsys current_fs,int option){
 	struct passwd *pwfile,pwd;  			 /* Used for uid verfication */
 	char user[50],file[100],extention[25];
 	int retval=0;
+	extern struct giis_protected_dir_info   s_giis_protected_dir_info;
+	ext2_filsys current_fs = NULL;
+	di=&s_giis_protected_dir_info;
 
 	fi=&s_giis_recovered_file_info;
 	in=&inode;
-
+	
+	
 	//get the connection
 	giis_ext4_open_db();
-	if (option == 5){//get by deleted date
-		giis_ext4_get_date();
-		option =1 ; //and start recovery all
-	}
-	if(option == 1){
-		//recover all
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_ALL,-1, &res, &tail);
-	}else if(option == 2){
-		//recover specific user
-		buf = malloc(8192);
-		if (buf == NULL) {
-			perror("malloc");
-			exit(EXIT_FAILURE);
-		}
-
-		printf ("\n Enter the User Name....");
-		scanf ("%s", user);
-		error = getpwnam_r(user, &pwd, buf, 8192, &pwfile);
-		if (pwfile == NULL)
-		{
-			handle_error("Please enter valid user name");
-		}
-
-		uid=pwd.pw_uid;
-
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_USR,-1, &res, &tail);
-		error = sqlite3_bind_int(res,1,uid);   assert(error == SQLITE_OK);
-	}else if (option == 3){
-		printf("\n Make sure you use \% before extentions - sql injection :) ");
-		puts("\n Enter the file extention  ( %.txt or  %.c or %.cpp ...) :");
-		scanf("%s",extention);
-
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_FTYPE,-1, &res, &tail);
-		error = sqlite3_bind_text(res, 1,extention,strlen(extention), SQLITE_STATIC);   assert(error == SQLITE_OK);
-	}else if (option == 4){
-		printf ("\n Enter the Filename Name....");
-		scanf ("%s", file);
-		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_FILE,-1, &res, &tail);
-		error = sqlite3_bind_text(res, 1,file,strlen(file), SQLITE_STATIC);   assert(error == SQLITE_OK);
-	}
-
+	// get devicename for ext2fs_open call
+	error = sqlite3_prepare_v2(conn,SQL_STMT_GET_DIRNAMES,-1, &res_hdr, &tail_hdr);
 
 	if (error != SQLITE_OK) {
-		handle_error("No matching record found.");
-	}else{
-		printf("\n Verifing inode:");
-		giis_ext4_recover_all_helper(current_fs,res,&inode);
-	}
-	sqlite3_finalize(res);
+                handle_error("No matching record found.");
+        }
+
+	 while (sqlite3_step(res_hdr) == SQLITE_ROW) {
+                di->max_depth=sqlite3_column_int(res_hdr, 0);
+                di->update_time=sqlite3_column_int(res_hdr, 1);
+                di->device_name=sqlite3_column_text(res_hdr, 2);
+                di->mntedon=sqlite3_column_text(res_hdr, 3);
+
+                di->protected_dir=sqlite3_column_text(res_hdr, 4);
+
+		fprintf(stdout,"\n Search Device %s",di->device_name);
+		current_fs = giis_ext4_fetch_current_fs(di->device_name);
+		error = sqlite3_prepare_v2(conn,SQL_STMT_GET_FILE,-1, &res, &tail);
+		error = sqlite3_bind_text(res, 1,file,strlen(file), SQLITE_STATIC);   assert(error == SQLITE_OK);
+
+
+		if (option == 5){//get by deleted date
+			giis_ext4_get_date();
+			option =1 ; //and start recovery all
+		}
+		if(option == 1){
+			//recover all
+			error = sqlite3_prepare_v2(conn,SQL_STMT_GET_ALL_FILES,-1, &res, &tail);
+			error = sqlite3_bind_text(res, 1,di->mntedon,strlen(di->mntedon), SQLITE_STATIC);   assert(error == SQLITE_OK);
+		}else if(option == 2){
+			//recover specific user
+			buf = malloc(8192);
+			if (buf == NULL) {
+				perror("malloc");
+				exit(EXIT_FAILURE);
+			}
+
+			fprintf (stdout,"\n Enter the User Name....");
+			scanf ("%s", user);
+			error = getpwnam_r(user, &pwd, buf, 8192, &pwfile);
+			if (pwfile == NULL)
+			{
+				handle_error("Please enter valid user name");
+			}
+
+			uid=pwd.pw_uid;
+
+			error = sqlite3_prepare_v2(conn,SQL_STMT_GET_USR,-1, &res, &tail);
+			error = sqlite3_bind_int(res,1,uid);   assert(error == SQLITE_OK);
+		}else if (option == 3){
+			printf("\n Make sure you use \% before extentions - sql injection :) ");
+			puts("\n Enter the file extention  ( %.txt or  %.c or %.cpp ...) :");
+			scanf("%s",extention);
+
+			error = sqlite3_prepare_v2(conn,SQL_STMT_GET_FTYPE,-1, &res, &tail);
+			error = sqlite3_bind_text(res, 1,extention,strlen(extention), SQLITE_STATIC);   assert(error == SQLITE_OK);
+		}else if (option == 4){
+			printf ("\n Enter the Filename Name....");
+			scanf ("%s", file);
+		}
+
+
+		if (error != SQLITE_OK) {
+			handle_error("No matching record found.");
+		}else{
+			assert(current_fs->device_name != NULL && current_fs->device_name != " ");
+			assert(current_fs->inode_map != NULL && current_fs->block_map != NULL);
+
+			printf("\n Verifing inode and blocks: ");
+			giis_ext4_recover_all_helper(current_fs,res,&inode);
+		}
+		ext2fs_close(current_fs);
+		// will be done in helper: sqlite3_finalize(res);
+        }
+	sqlite3_finalize(res_hdr);
 	giis_ext4_close_db();
+
+return 0;
 }
 int giis_ext4_recover_all_helper(ext2_filsys current_fs,sqlite3_stmt *res,struct ext2_inode *in){
 	struct ext2_inode inode;
@@ -711,7 +807,7 @@ int giis_ext4_recover_all_helper(ext2_filsys current_fs,sqlite3_stmt *res,struct
 
 		fi->inode_num=sqlite3_column_int64(res, 1);
 		if(!just_list)
-			printf("%lu|",fi->inode_num);
+			fprintf(stdout,"%lu|",fi->inode_num);
 
 		fi->extents[0]=sqlite3_column_int(res, 2);
 		fi->starting_block[0]=sqlite3_column_int64(res, 3);
@@ -734,66 +830,70 @@ int giis_ext4_recover_all_helper(ext2_filsys current_fs,sqlite3_stmt *res,struct
 		fi->owner=sqlite3_column_int(res, 13);
 		fi->group=sqlite3_column_int(res, 14);
 		fi->md5sum=sqlite3_column_text(res, 15);
+		fi->mntedon=sqlite3_column_text(res, 15);
 
 		/* Verify  fpath's device_mnt_dir is valid */
-		giis_ext4_validate_path_device(current_fs,fi->fpath);
+		//current_fs=giis_ext4_validate_path_device(current_fs,fi->fpath);
 
-		assert(current_fs->device_name != NULL && current_fs->device_name != " ");
+		if (!ext2fs_test_inode_bitmap2(current_fs->inode_map,fi->inode_num))
+			fprintf(stdout,"\n Inode <%lu> is free", fi->inode_num);
+		if (!ext2fs_test_block_bitmap2(current_fs->block_map,fi->starting_block[0]))
+			fprintf(stdout,"\t Free block inode:<%lu> %lu \n",fi->inode_num,fi->starting_block[0]);
+		
+
 		/* testi */
-		if (ext2fs_test_inode_bitmap2(current_fs->inode_map,fi->inode_num)){
-			printf("Inode %u is marked in use\n", inode);
+		if (ext2fs_test_inode_bitmap2(current_fs->inode_map,fi->inode_num) && ext2fs_test_block_bitmap2(current_fs->block_map,fi->starting_block[0])){
 			inode.i_links_count=1;
-		}else
+		}else {
 			ext2fs_read_inode(current_fs,fi->inode_num,&inode);
 
-		if (inode.i_links_count ==0 && S_ISREG(fi->mode)){
-			/* *********************************/
-			i=0;
-			while(fi->extents[i] && i < 4 ){
-				/* Set extents length and start block */
-				total_blks=fi->extents[i];
-				blk=fi->starting_block[i];
-				//test whether blk is indeed free
-				while(total_blks > 0){		
-					if (ext2fs_test_block_bitmap2(current_fs->block_map,blk)){
-						printf("Block %llu marked in use\n", blk);
-						sleep(1);
-						goto out;
+			if (inode.i_links_count ==0 && S_ISREG(fi->mode)){
+				i=0;
+				while(fi->extents[i] && i < 4 ){
+					/* Set extents length and start block */
+					total_blks=fi->extents[i];
+					blk=fi->starting_block[i];
+					//test whether blk is indeed free
+					while(total_blks > 0){		
+						if (ext2fs_test_block_bitmap2(current_fs->block_map,blk)){
+							fprintf(stdout,"Block %lu marked in use\n", blk);
+							sleep(1);
+							goto out;
+						}
+
+						blk++;
+						total_blks --;
 					}
-
-					blk++;
-					total_blks --;
+					i++;
 				}
-				i++;
-			}
 
-			/********************************/
-			if(date_mode !=-1){
-				if((giis_ext4_check_ddate(in)==1) && (fi->starting_block[0])){
-					if(!just_list)
-						giis_ext4_dump_data_blocks(fi,current_fs);
-					else
-						giis_ext4_list_file_details(fi,current_fs);
+				if(date_mode !=-1){
+					if((giis_ext4_check_ddate(in)==1) && (fi->starting_block[0])){
+						if(!just_list)
+							giis_ext4_dump_data_blocks(fi,current_fs);
+						else
+							giis_ext4_list_file_details(fi,current_fs);
+					}
+				}else{//Not date mode
+					if(fi->starting_block[0])
+						if(!just_list)
+							giis_ext4_dump_data_blocks(fi,current_fs);
+						else
+							giis_ext4_list_file_details(fi,current_fs);
 				}
-			}else{//Not date mode
-				if(fi->starting_block[0])
-					if(!just_list)
-						giis_ext4_dump_data_blocks(fi,current_fs);
-					else
-						giis_ext4_list_file_details(fi,current_fs);
-			}
-		} 
+			} 
+		}
 
 out:	
 		rec_count++;
 	}
-
-
+	sqlite3_finalize(res);
+return 0;
 }
-void giis_ext4_validate_path_device(ext2_filsys current_fs,char *fpath){
+
+ext2_filsys giis_ext4_validate_path_device(ext2_filsys current_fs,char *fpath){
 	char pathname[128]={'\0'};
 	int retval=0;
-	//printf("\n Verifing path and device:");
 	struct partition_info *current=pinfo;
 	strcpy(pathname,fpath);
 	while(current!=NULL){
@@ -806,21 +906,19 @@ void giis_ext4_validate_path_device(ext2_filsys current_fs,char *fpath){
 					//close device and reopen -
 					ext2fs_close(current_fs);
 					current_fs=NULL;
-					retval = ext2fs_open(device, EXT2_FLAG_SOFTSUPP_FEATURES | EXT2_FLAG_RW,0,0,unix_io_manager, &current_fs);
-					if (retval) {
-						current_fs = NULL;		
-						printf("\n ->%s",device);
-						handle_error("Error while opening filesystem.");
-					}
-
-					EXT2_BLOCK_SIZE=current_fs->blocksize;
+					current_fs = giis_ext4_fetch_current_fs(di->device_name);
 				}
 			}
+		}else{
+			strcpy(device,current->device);//set appropriate device name
+			strcpy(device_mnt_dir,"/");
 		}
+
 		current=current->next;
 	} 
+	return current_fs;
 }
-		//////////////////////////////////////////////////
+
 int giis_ext4_write_into_file(struct giis_recovered_file_info *fi,unsigned char buf[EXT2_BLOCK_SIZE]){
 	int fp;
 	int retval=0;
@@ -863,32 +961,32 @@ int giis_ext4_search4fs (char *device)
 	char *wordptr=NULL;
 	size_t bytes=0;
 	ssize_t read=0;
-	fd = fopen ("/etc/mtab", "r");
+	fd = fopen ("/proc/mounts", "r");
 	if (fd == NULL){
-		close(fd);
-		handle_error("giis_ext4_search4fs::unable to open /etc/mtab");
+		fclose(fd);
+		handle_error("giis_ext4_search4fs::unable to open /proc/mounts");
 	}
 
 	while (fd !=NULL){
 		if (read = (getline(&line,&bytes,fd) == -1)){
 			//puts("EOF");
 			free(line);
-			close(fd);
+			fclose(fd);
 			return -1;
 		}
 
 		if (strstr(line,"/ ext4 ") !=NULL){
 			wordptr = strtok(line," "); 
 			strcpy(device,wordptr);
-			printf("\n Device Found : %s",device);
+			fprintf(stdout,"\n Root Device Found : %s",device);
 			free(line);
-			close(fd);
+			fclose(fd);
 			return 1;
 
 		}			
 	}
 	free(line);
-	close(fd);
+	fclose(fd);
 	return -1;
 }
 /* list all ext4 devices */ 
@@ -900,8 +998,11 @@ int giis_ext4_search4fs_all(struct partition_info** pinfo){
 	char mntdir[MAXPATHLEN];
 	extern int multi_partition;
 	struct partition_info *newinfo=NULL;
-
+	#ifndef ANDROID
 	fp = setmntent(MOUNTED, "r"); 
+	#else
+        fp = setmntent("/etc/mtab","r");
+	#endif
 	if(fp == NULL)
 		handle_error("giis_ext4_search4fs_all::unable to open /etc/mtab");
 
@@ -922,13 +1023,13 @@ int giis_ext4_search4fs_all(struct partition_info** pinfo){
 		}
 	}
 	endmntent(fp);
-	printf("\n ==> %d =>",multi_partition);
+	fprintf(stdout,"\n ==> %d =>",multi_partition);
 	return 0;
 }
 void giis_ext4_device_list(struct partition_info *current){
 
 	while(current!=NULL){
-		printf("\ndevice:--> %s mntdir:-->%s\n",current->device,current->mntdir);
+		fprintf(stdout,"\ndevice:--> %s mntdir:-->%s\n",current->device,current->mntdir);
 		current=current->next;
 	}
 }
@@ -994,6 +1095,7 @@ int giis_ext4_get_date(){
 	{
 		handle_error("\n Please Enter Valid Date.");
 	}
+return 0;
 }
 
 int giis_ext4_check_ddate(struct ext2_inode *inode){
@@ -1049,9 +1151,10 @@ int giis_ext4_check_ddate(struct ext2_inode *inode){
 			return 0;
 	}
 
+return 0;
 }
 
-int giis_ext4_creat_tables(char *device){
+int giis_ext4_creat_tables(struct partition_info *pinfo, char *device){
 	extern sqlite3 *conn;
 	sqlite3_stmt    *Stmt;
 	int     error = 0;
@@ -1062,6 +1165,7 @@ int giis_ext4_creat_tables(char *device){
 	int count;		
 	int ans,max_depth,update_time;
 	char dirname[8][512]={0};
+	int found_partition=0;
 
 	// Creat dirs
 	if(mkdir(GIISDIR,0700)==-1)
@@ -1083,9 +1187,8 @@ int giis_ext4_creat_tables(char *device){
 		fprintf(stderr, "Can not create table:  \n" );
 		exit(0);
 	}else{
-		printf("\n giis-ext4: header table created");
+		fprintf(stdout,"\n giis-ext4: header table created");
 	}
-
 
 
 	//create table
@@ -1095,53 +1198,66 @@ int giis_ext4_creat_tables(char *device){
 		fprintf(stderr, "Can not create table:  \n" );
 		exit(0);
 	}else{
-		printf("\n giis-ext4: file table created");
+		fprintf(stdout,"\n giis-ext4: file table created");
 	}
 	printf("\n What's the maximum directory depth?");
 	scanf("%d",&max_depth);
+	printf("\n Check for newly files every 'auto update time' minutes.\nEnter auto update time: ");
+	scanf("%d",&update_time);
 	printf("\n Enter the dirname name,that you would like to protect(Max. 7 directories)");
 	count=0;
 	do{
+		struct partition_info *current=pinfo;
 		printf("\n Enter dirname:");
 		scanf("%s",dirname[count]);
+
+		//set device details
+	        while(current!=NULL)
+		{
+               
+		if (strcmp(current->mntdir,"/")){
+			if( !strncmp(dirname[count],current->mntdir,strlen(current->mntdir))){
+					strcpy(device,current->device);//set appropriate device name
+					strcpy(device_mnt_dir,current->mntdir);
+					fprintf(stdout,"\ndir:%s belongs to %s",dirname[count],current->mntdir);
+					found_partition = 1;
+				} 
+			} 
+
+		current=current->next;
+		} 
+		if ( !found_partition) {
+			fprintf(stdout,"\ndir:%s belongs to /",dirname[count]);
+			strcpy(device_mnt_dir,"/");
+		}
+		//done device
 		printf("\n Press 1 to add/protect another directory else Press 0 to complete: ");
 		scanf("%d",&ans);
+
+
+		/*Now insert the records into giis header table */
+		error = sqlite3_prepare(conn,SQL_STMT_INSERT_HEADER, -1, &Stmt, &zLeftover);
+		assert(error == SQLITE_OK);
+
+		error = sqlite3_bind_int(Stmt, 1,max_depth);   assert(error == SQLITE_OK);
+		error = sqlite3_bind_int(Stmt, 2,update_time);   assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(Stmt, 3,device, strlen(device), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(Stmt, 4,device_mnt_dir, strlen(device_mnt_dir), SQLITE_STATIC);assert(error == SQLITE_OK);
+		error = sqlite3_bind_text(Stmt, 5,dirname[count], strlen(dirname[count]), SQLITE_STATIC);assert(error == SQLITE_OK);
+
+		error = sqlite3_step(Stmt);                 assert(error == SQLITE_DONE);
+		error = sqlite3_reset(Stmt);                assert(error == SQLITE_OK);
+
+
+		sqlite3_finalize(Stmt);
 		count++;
+		found_partition = 0;
 	}while(count<7 && (ans != 0) );
 
 
-	printf("\n Check for newly files every 'auto update time' minutes.\nEnter auto update time: ");
-	scanf("%d",&update_time);
-
-
-	/*Now insert the records into giis header table */
-	error = sqlite3_prepare(conn,SQL_STMT_INSERT_HEADER, -1, &Stmt, &zLeftover);
-	assert(error == SQLITE_OK);
-
-	error = sqlite3_bind_int(Stmt, 1,max_depth);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_int(Stmt, 2,update_time);   assert(error == SQLITE_OK);
-	error = sqlite3_bind_text(Stmt, 3,device, strlen(device), SQLITE_STATIC);assert(error == SQLITE_OK);
-
-	error = sqlite3_bind_text(Stmt, 4,dirname[0], strlen(dirname[0]), SQLITE_STATIC);assert(error == SQLITE_OK);
-	error = sqlite3_bind_text(Stmt, 5,dirname[1], strlen(dirname[1]), SQLITE_STATIC);assert(error == SQLITE_OK);
-	error = sqlite3_bind_text(Stmt, 6,dirname[2], strlen(dirname[2]), SQLITE_STATIC);assert(error == SQLITE_OK);
-
-	error = sqlite3_bind_text(Stmt, 7,dirname[3], strlen(dirname[3]), SQLITE_STATIC);assert(error == SQLITE_OK);
-	error = sqlite3_bind_text(Stmt, 8,dirname[4], strlen(dirname[4]), SQLITE_STATIC);assert(error == SQLITE_OK);
-	error = sqlite3_bind_text(Stmt, 9,dirname[5], strlen(dirname[5]), SQLITE_STATIC);assert(error == SQLITE_OK);
-	error = sqlite3_bind_text(Stmt, 10,dirname[6], strlen(dirname[6]), SQLITE_STATIC);assert(error == SQLITE_OK);
-
-
-
-	error = sqlite3_step(Stmt);                 assert(error == SQLITE_DONE);
-	error = sqlite3_reset(Stmt);                assert(error == SQLITE_OK);
-
-
-	sqlite3_finalize(Stmt);
-
-
+return 0;
 }
-int giis_ext4_update_dirs(ext2_filsys current_fs){
+int giis_ext4_update_dirs(){
 	extern sqlite3 *conn;
 	sqlite3_stmt    *Stmt;
 	int     error = 0;
@@ -1149,11 +1265,11 @@ int giis_ext4_update_dirs(ext2_filsys current_fs){
 	char  *errmsg;
 	const char *zLeftover;
 	time_t result;					/* time n date of when this record updated into db */
-	int count;		
 	int ans;
 	char dirname[8][512]={0};
 	sqlite3_stmt    *res;
 	const char      *tail;
+	ext2_filsys     current_fs = NULL;
 
 	extern int max_dir_depth,update_time;
 
@@ -1167,38 +1283,28 @@ int giis_ext4_update_dirs(ext2_filsys current_fs){
 	}
 
 
-	if (sqlite3_step(res) == SQLITE_ROW) {
+	while (sqlite3_step(res) == SQLITE_ROW) {
 		di->max_depth=sqlite3_column_int(res, 0);
 		di->update_time=sqlite3_column_int(res, 1);
 		di->device_name=sqlite3_column_text(res, 2);
-
-		di->protected_dir[0]=sqlite3_column_text(res, 3);
-		di->protected_dir[1]=sqlite3_column_text(res, 4);
-		di->protected_dir[2]=sqlite3_column_text(res, 5);
-		di->protected_dir[3]=sqlite3_column_text(res, 6);
-
-		di->protected_dir[4]=sqlite3_column_text(res, 7);
-		di->protected_dir[5]=sqlite3_column_text(res, 8);
-		di->protected_dir[6]=sqlite3_column_text(res, 9);
-
+		di->mntedon=sqlite3_column_text(res, 3);
+		di->protected_dir=sqlite3_column_text(res, 4);
 
 		//set max_depth 
 		max_dir_depth=di->max_depth;
 		//set auto update
 		update_time=di->update_time;
+		current_fs = giis_ext4_fetch_current_fs(di->device_name);
+		if (di->device_name == " ")
+			di->device_name="/";
 
-		count=0;
-		while(strlen(di->protected_dir[count])!=0){
-			giis_ext4_parse_dir(1,di->protected_dir[count],getinodenumber(di->protected_dir[count]),current_fs);
-			count++;
-
-		}
-
+		giis_ext4_parse_dir(1,di->protected_dir,getinodenumber(di->protected_dir),current_fs,di->mntedon);
+		ext2fs_close(current_fs);
 	}
 
 	sqlite3_finalize(res);
 	giis_ext4_close_db();
-
+return 0;
 }
 
 unsigned long getinodenumber(char *path){
@@ -1214,15 +1320,15 @@ void giis_ext4_close_db(){
 	extern sqlite3 *conn;
 
 close2:
-	while(sqlite3_close(conn)==SQLITE_BUSY){
-		printf("\n Db not closed");
+	while(sqlite3_close_v2(conn)==SQLITE_BUSY){
+		fprintf(stdout,"\n Db not closed");
 		sleep(5);
 		goto close2;
 	}
 
 	if(update==TRUE){
 		if (giis_ext4_unlock_db(dp,0,0) !=0)
-			printf("unlock failed");
+			fprintf(stdout,"unlock failed");
 	}
 }
 
@@ -1265,7 +1371,7 @@ void giis_ext4_open_db(){
 		dp=open(dbfile,O_RDWR);
 
 		if (giis_ext4_lock_db(dp,0,0) !=0){
-			printf("lock failed");
+			fprintf(stdout,"lock failed");
 			giis_ext4_get_lock(dp,0,1);
 		}
 	}
@@ -1279,30 +1385,32 @@ void giis_ext4_open_db(){
 	}
 }
 //todo:this function currently just check whether record exists or not.
-int giis_ext4_sqlite_verify_record(unsigned long number){
+int giis_ext4_sqlite_new_record(unsigned long number){
 	int     error = 0;
 	sqlite3_stmt    *Stmt;
 	const char      *tail;
 	error = sqlite3_prepare_v2(conn,SQL_STMT_VERIFY_INODE,-1, &Stmt, &tail);
 	error = sqlite3_bind_int64(Stmt,1,number);   assert(error == SQLITE_OK);
 	if (error != SQLITE_OK) {
-		printf("No matching record found");
+		fprintf(stdout,"No matching record found");
 		return 1;
 	}
-	//printf("\ninode<%lu>",number);
 	if (sqlite3_step(Stmt) == SQLITE_ROW){
-		//printf("Record already exists");   
 		sqlite3_finalize(Stmt);
 		return 0;
 	}
 	else{
-		//  printf("No Record already exists");     
 		sqlite3_finalize(Stmt);
 		return 1;
 	}
 
 }
-int giis_ext4_sqlite_verify_record_for_directory(unsigned long number,unsigned long mtime,unsigned long ctime){
+
+/* Returns
+ * 1 => If DB entry (ctime,mtime) matches with given record 
+ * 0 ==> If DB ctime,mtime doesnt match with ondisk stat
+ */
+int giis_ext4_sqlite_dir_ctime_mtime_match(unsigned long number,unsigned long mtime,unsigned long ctime){
 	int     error = 0;
 	sqlite3_stmt    *Stmt;
 	const char      *tail;
@@ -1310,12 +1418,10 @@ int giis_ext4_sqlite_verify_record_for_directory(unsigned long number,unsigned l
 	error = sqlite3_prepare_v2(conn,SQL_STMT_VERIFY_INODE,-1, &Stmt, &tail);
 	error = sqlite3_bind_int64(Stmt,1,number);   assert(error == SQLITE_OK);
 	if (error != SQLITE_OK) {
-		printf("No matching record found");
+		fprintf(stdout,"No matching record found");
 		return 1;
 	}
-	//	printf("\ninode<%lu>",number);
 	if (sqlite3_step(Stmt) == SQLITE_ROW){
-		//	  printf("Record already exists");   
 		db_mtime=sqlite3_column_int64(Stmt, 12);
 		db_ctime=sqlite3_column_int64(Stmt, 14);
 		sqlite3_finalize(Stmt);
@@ -1328,7 +1434,6 @@ int giis_ext4_sqlite_verify_record_for_directory(unsigned long number,unsigned l
 
 	}
 	else{
-		//	  printf("No Record already exists");     
 		sqlite3_finalize(Stmt);
 		return 1;
 	}
@@ -1336,51 +1441,50 @@ int giis_ext4_sqlite_verify_record_for_directory(unsigned long number,unsigned l
 }
 //this function will remove giis-ext4
 int giis_ext4_uninstall(){
-	int retval=0;
-	printf("\n\t Press 1 to uninstall:");
-	scanf("%d",&retval);
-	if(retval==1){
+		fprintf(stdout,"\n\t Press anykey to continue with Uninstallation, Ctrl+C to cancel");
+		getchar();
+		int retval;
 
 		retval=unlink (SQLITE_DB_LOCATION);
 		if (retval == 0)
-			printf ("\n\t%s Removed",SQLITE_DB_LOCATION);
+			fprintf (stdout,"\n\t%s Removed",SQLITE_DB_LOCATION);
 		else
-			printf ("\n\t%s not deleted - please remove it manually.",SQLITE_DB_LOCATION);
+			fprintf (stdout,"\n\t%s not deleted - please remove it manually.",SQLITE_DB_LOCATION);
 
 		retval=unlink (GIIS_LOG_FILE);
 		if (retval == 0)
-			printf ("\n\t%s Removed.",GIIS_LOG_FILE);
+			fprintf (stdout,"\n\t%s Removed.",GIIS_LOG_FILE);
 		else
-			printf ("\n\t%s not deleted - please remove it manually.",GIIS_LOG_FILE);
+			fprintf (stdout,"\n\t%s not deleted - please remove it manually.",GIIS_LOG_FILE);
 
 		retval=rmdir (RESTORE_DIR);
 		if (retval == 0)
-			printf ("\n\t%s Removed.",RESTORE_DIR);
+			fprintf (stdout,"\n\t%s Removed.",RESTORE_DIR);
 		else
-			printf ("\n\t%s not deleted - please remove it manually.",RESTORE_DIR);
+			fprintf (stdout,"\n\t%s not deleted - please remove it manually.",RESTORE_DIR);
 
 
 		retval=rmdir (SQLITE_DB_DIR);
 		if (retval == 0)
-			printf ("\n\t%s Removed.",SQLITE_DB_DIR);
+			fprintf (stdout,"\n\t%s Removed.",SQLITE_DB_DIR);
 		else
-			printf ("\n\t%s not deleted - please remove it manually.",SQLITE_DB_DIR );
+			fprintf (stdout,"\n\t%s not deleted - please remove it manually.",SQLITE_DB_DIR );
 
 		retval=rmdir (GIISDIR);
 		if (retval == 0)
-			printf ("\n\t%s Removed.",GIISDIR);
+			fprintf (stdout,"\n\t%s Removed.",GIISDIR);
 		else
-			printf ("\n\t%s not deleted - please remove it manually.",GIISDIR );
+			fprintf (stdout,"\n\t%s not deleted - please remove it manually.",GIISDIR );
 
-		retval=unlink ("/usr/bin/giis-ext4");
+		retval=unlink ("/usr/sbin/giis-ext4");
 		if (retval == 0)
-			printf ("\n\tgiis-ext4 binary Removed.");
+			fprintf (stdout,"\n\tgiis-ext4 binary Removed.");
 		else
-			printf ("\n\tgiis-ext4 not deleted - please remove it manually.");
+			fprintf (stdout,"\n\tgiis-ext4 not deleted - please remove it manually.");
 
-		printf("\n giis-ext4: cleaned up - Please remove giis-ext4 related entry from crontab file\n");
-		printf("\n Don't forgot to take backups!! Good luck :)\n\n ");
-	}
+		fprintf(stdout,"\n giis-ext4: cleaned up - Please remove giis-ext4 related entry from crontab file\n");
+		fprintf(stdout,"\n Don't forgot to take backups!! Good luck :)\n\n ");
+return 0;
 }
   
 int giis_ext4_list_file_details(struct giis_recovered_file_info *fi,ext2_filsys current_fs){
