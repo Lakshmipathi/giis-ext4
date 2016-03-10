@@ -49,7 +49,7 @@
 #define SQLITE_DB_DIR "/usr/local/giis/db"
 #define SQLITE_DB_LOCATION "/usr/local/giis/db/giis-db"
 #define GIIS_LOG_FILE "/usr/local/giis/giis.log"
-#define RESTORE_DIR "/usr/local/giis/got_it/"
+#define RESTORE_DIR "/usr/local/giis/trash/"
 
 
 #define handle_error(msg) \
@@ -111,8 +111,8 @@ static struct argp_option options[] =
 
 
 struct partition_info {
-	char device[75];
-	char mntdir[75];
+	char device[NAME_MAX];
+	char mntdir[NAME_MAX];
 	struct partition_info* next;
 }*pinfo;
 
@@ -125,11 +125,11 @@ int EXT2_BLOCK_SIZE;
 int date_mode=-1,day,month,year,day1,month1,year1;
 int is_file_already_exists = 0;
 int dp;
-char cwd[40];
+char cwd[NAME_MAX];
 int multi_partition=FALSE;
 int trash_bin=TRUE;
-char device[75];
-char device_mnt_dir[75];
+char device[NAME_MAX];
+char device_mnt_dir[NAME_MAX];
 const char *argp_program_version = "giis-ext4 1.3 (17-12-2013) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
@@ -243,7 +243,7 @@ void print_usage(){
 
 
 int main(int argc,char *argv[]){
-	extern char device[75];
+	extern char device[NAME_MAX];
 	int retval=0;
 	int i=0;
 	int ans=0;
@@ -316,7 +316,8 @@ int main(int argc,char *argv[]){
 		fprintf(stdout,"\n press 1: get all user files");fprintf(stdout,"\n press 2: get specific user files");
 		fprintf(stdout,"\n press 3: get specific file type");fprintf(stdout,"\n press 4: get specific file");
 		fprintf(stdout,"\n press 5: get it by deleted date");fprintf(stdout,"\n Enter your option:");
-		scanf("%d",&ans);
+//		scanf("%d",&ans);
+		ans = 1;
 
 		giis_ext4_recover_all(ans);
 		fprintf(stdout,"\n\n **giis-ext4 : Recovery completed.Please check %s for more details and %s for files **\n",GIIS_LOG_FILE,RESTORE_DIR);
@@ -514,7 +515,7 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 	errcode_t	retval;
 	int total_blks=0;
 	extern int is_file_already_exists;
-	char file_location[512]={0};
+	char file_location[PATH_MAX]={0};
 
 	char md5_cmd[512],md5sum[34];
 	extern char md5_cmd2[512];
@@ -901,7 +902,7 @@ return 0;
 }
 
 ext2_filsys giis_ext4_validate_path_device(ext2_filsys current_fs,char *fpath){
-	char pathname[128]={'\0'};
+	char pathname[PATH_MAX]={'\0'};
 	int retval=0;
 	struct partition_info *current=pinfo;
 	strcpy(pathname,fpath);
@@ -931,7 +932,7 @@ ext2_filsys giis_ext4_validate_path_device(ext2_filsys current_fs,char *fpath){
 int giis_ext4_write_into_file(struct giis_recovered_file_info *fi,unsigned char buf[EXT2_BLOCK_SIZE]){
 	int fp;
 	int retval=0;
-	char name[275] = RESTORE_DIR;
+	char name[PATH_MAX] = RESTORE_DIR;
 	char cmd[4096] = {'\0'};
 	extern int is_file_already_exists;
 	char *dirc = strdup(fi->fpath);
