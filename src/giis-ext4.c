@@ -123,10 +123,11 @@ int update_time,update;
 sqlite3 *conn;
 int EXT2_BLOCK_SIZE;
 int date_mode=-1,day,month,year,day1,month1,year1;
-int is_file_already_exists;
+int is_file_already_exists = 0;
 int dp;
 char cwd[40];
 int multi_partition=FALSE;
+int trash_bin=TRUE;
 char device[75];
 char device_mnt_dir[75];
 const char *argp_program_version = "giis-ext4 1.3 (17-12-2013) ";
@@ -518,10 +519,12 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 	char md5_cmd[512],md5sum[34];
 	extern char md5_cmd2[512];
 	FILE *pf;
-
-	is_file_already_exists=0;
-	if(open (fi->fpath, O_CREAT|O_EXCL, S_IRWXU |S_IRWXG |S_IRWXO) == -1 )
-		is_file_already_exists=1;
+	
+	if (!trash_bin){
+		is_file_already_exists=0;
+		if(open (fi->fpath, O_CREAT|O_EXCL, S_IRWXU |S_IRWXG |S_IRWXO) == -1 )
+			is_file_already_exists=1;
+	}
 
 	i=0;
 	while(fi->extents[i] && i < 4 ){
@@ -551,9 +554,15 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 		i++;
 	}
 	/* log file name and path */
-	if(is_file_already_exists){
-		strcpy(file_location,RESTORE_DIR);
-		strcat(file_location,fi->fname);
+	if(is_file_already_exists || trash_bin){
+		if (!trash_bin){
+			strcpy(file_location,RESTORE_DIR);
+			strcat(file_location,fi->fname);
+		}else{
+			strcpy(file_location,RESTORE_DIR);
+			strcat(file_location,fi->fpath);
+		}
+
 	}else{
 		strcpy(file_location,fi->fpath);
 	}
@@ -923,9 +932,17 @@ int giis_ext4_write_into_file(struct giis_recovered_file_info *fi,unsigned char 
 	int fp;
 	int retval=0;
 	char name[275] = RESTORE_DIR;
+	char cmd[4096] = {'\0'};
 	extern int is_file_already_exists;
+	char *dirc = strdup(fi->fpath);
 
-	if(is_file_already_exists){
+	if(is_file_already_exists || trash_bin){
+		if (trash_bin){
+                        strcat (name, dirname(dirc));
+                        strcat (name, "/");
+                        sprintf(cmd,"mkdir -p %s",name);
+                        system(cmd);  //mkdir() doesnt support missing parent creation.
+		}
 		strcat (name, fi->fname);
 		fp = open (name, O_CREAT|O_APPEND | O_RDWR ,S_IRWXU |S_IRWXG |S_IRWXO);
 		chmod(name,fi->mode);
