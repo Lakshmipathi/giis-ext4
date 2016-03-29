@@ -31,17 +31,17 @@
 
 
 /* SQL statements used in this program */
-#define SQL_STMT_GET_ALL "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable "
-#define SQL_STMT_GET_ALL_FILES "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where ftype=1 and mntedon=?"
-#define SQL_STMT_GET_USR "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where owner=?  "
-#define SQL_STMT_GET_FTYPE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where name like ? "
-#define SQL_STMT_GET_FILE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon from giistable where name=?  "
+#define SQL_STMT_GET_ALL "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable "
+#define SQL_STMT_GET_ALL_FILES "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where ftype=1 and mntedon=?"
+#define SQL_STMT_GET_USR "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where owner=?  "
+#define SQL_STMT_GET_FTYPE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where name like ? "
+#define SQL_STMT_GET_FILE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where name=?  "
 #define SQL_STMT_GET_DIRNAMES "select * from giisheader"
 #define SQL_STMT_VERIFY_INODE "select * from giistable where inode=?"
 
 #define SQL_STMT_CREATE_HEADER "create table giisheader(max_depth int,update_time int,device_name varchar(100),mntedon varchar(512),protected_dir1 varchar(512));"
-#define SQL_STMT_CREATE_TABLE "create table giistable(name varchar(256),inode long ,parent_inode long,mode int,owner int,fflags int,fsize int,ftype varchar(5),fpath varchar(512),gid int,depth int, ext1 int,blk1 long,ext2 int,blk2 long,ext3 int,blk3 long,ext4 int,blk4 long,md5sum varchar(34),mntedon varchar(34));"
-#define SQL_STMT_INSERT_TABLE "insert into giistable values(?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?,?,?)"
+#define SQL_STMT_CREATE_TABLE "create table giistable(name varchar(256),inode long ,parent_inode long,mode int,owner int,fflags int,fsize int,ftype varchar(5),fpath varchar(512),gid int,depth int, ext1 int,blk1 long,ext2 int,blk2 long,ext3 int,blk3 long,ext4 int,blk4 long,md5sum varchar(34),mntedon varchar(34), is_deleted int,is_recovered int);"
+#define SQL_STMT_INSERT_TABLE "insert into giistable values(?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?, ?, ?,?,?,?,?,?)"
 #define SQL_STMT_INSERT_HEADER "insert into giisheader values(?,?,?,?,?)"
 
 	/* dirs */
@@ -519,8 +519,10 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 
 	char md5_cmd[512],md5sum[34];
 	extern char md5_cmd2[512];
+	char sql_update_cmd[1024];
 	FILE *pf;
 	
+	extern sqlite3 *conn;
 	if (!trash_bin){
 		is_file_already_exists=0;
 		if(open (fi->fpath, O_CREAT|O_EXCL, S_IRWXU |S_IRWXG |S_IRWXO) == -1 )
@@ -588,8 +590,17 @@ int giis_ext4_dump_data_blocks(struct giis_recovered_file_info *fi,ext2_filsys c
 
 	fprintf(stdout,"Md5sum is %s",md5sum);
 
-	giis_ext4_log_mesg(file_location,fi->md5sum,md5sum);
+	if(giis_ext4_log_mesg(file_location,fi->md5sum,md5sum)){
+		//md5sum matches
+		sprintf(sql_update_cmd,"update giistable set is_deleted=1,is_recovered=1 where inode=%lu",fi->inode_num);
+	}else{
+		//md5sum mismatch
+		sprintf(sql_update_cmd,"update giistable set is_deleted=1,is_recovered=0 where inode=%lu",fi->inode_num);
+	}
 
+	if (sqlite3_exec(conn,sql_update_cmd,0, 0, 0)){
+		fprintf(stderr," sqlite3_exec failed.");
+	}
 	return 1;
 }
 char md5_cmd2[512];
@@ -684,6 +695,8 @@ int giis_ext4_sqlite_insert_record(struct linux_dirent *d1,struct ext2_inode *in
 		error = sqlite3_bind_text(Stmt, 20,md5sum, 34, SQLITE_STATIC);assert(error == SQLITE_OK);
 	}
         error = sqlite3_bind_text(Stmt, 21,mntedon, strlen(mntedon), SQLITE_STATIC);assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(Stmt, 22,0);   assert(error == SQLITE_OK);
+	error = sqlite3_bind_int(Stmt, 23,0);   assert(error == SQLITE_OK);
 
 
 
@@ -1057,6 +1070,7 @@ int giis_ext4_log_mesg(char *mesg,char *md5sum,char *new_md5sum){
 	struct tm mytm;
 	time_t result;
 	char line[256];
+	int ret = 0;
 	result=time(NULL);
 
 	fp=open(GIIS_LOG_FILE,O_RDWR |O_CREAT| O_APPEND,S_IRWXU |S_IRWXG |S_IRWXO);
@@ -1074,10 +1088,14 @@ int giis_ext4_log_mesg(char *mesg,char *md5sum,char *new_md5sum){
 	write(fp,line,strlen(line));
 
 	memset(line,'\0',256);
-	if(strcmp(md5sum,new_md5sum)==0)
+	if(strcmp(md5sum,new_md5sum)==0){
 		sprintf(line,"MD5SUM Match:Yes \n");
-	else
+		ret = 1;
+	}
+	else	{
 		sprintf(line,"MD5SUM Match:No \n");
+		ret = 0;
+	}
 	write(fp,line,strlen(line));
 
 
@@ -1086,7 +1104,7 @@ int giis_ext4_log_mesg(char *mesg,char *md5sum,char *new_md5sum){
 	write(fp,line,strlen(line));
 
 	close(fp);
-	return 1;
+	return ret;
 }
 //
 int giis_ext4_get_date(){
