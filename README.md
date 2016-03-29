@@ -1,16 +1,16 @@
 				# gET iT i sAY. giis for ext4 (giis-ext4)
 				   version.2.0
 	
-*About giis
-*How to install
-*User Guide and Documents
++About giis
++How to install
++User Guide and Documents
 
 
 ### About giis:
 
 Linux Desktop comes with Trash Bin for GUI. But when you delete a file from commandline or delete a file via programs. They will be deleted forever! giis-ext4 acts as a recycle bin in such cases. 
 
-gET iT i sAY.giis-ext4 is a text based file recovery tool.Once you install giis-ext4,files on your disk can be recovered using giis-ext4. But Those files which deleted before the installation of giis-ext4 can't be recovered using giis-ext4.User has the option to choose directories too. Add only those directories where you will store important data.(adding directories like /tmp gives giis-ext4 overhead and installation will take long time).It can recovers a deleted file and restores in it's original directory,if path exists.It recoversdropped database tables.
+`gET iT i sAY.giis-ext4` is a text based file recovery tool.Once you install giis-ext4,files on your disk can be recovered using giis-ext4. But Those files which deleted before the installation of giis-ext4 can't be recovered using giis-ext4.User has the option to choose directories too. Add only those directories where you will store important data.(adding directories like /tmp gives giis-ext4 overhead and installation will take long time).It can recovers a deleted file and restores in it's original directory,if path exists.It recoversdropped database tables.
 
 ### Screencast:
 Tip,to save 6 minutes of your life, During screen-cast after 1:08 you can skip to 7:38. If you interested in boring recovery messages,feel free to watch the whole screen-cast :)
@@ -48,7 +48,6 @@ For more screencasting/manuals,checkout  www.giis.co.in
 
 You can get me at  <lakshmipathi.g@giis.co.in>
 
--Lakshmipathi.G
++Lakshmipathi.G
 www.giis.co.in
--Mar 29,2016.
-==================================EOF==================================
++Mar 29,2016.
