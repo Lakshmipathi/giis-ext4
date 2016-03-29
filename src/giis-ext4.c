@@ -130,7 +130,7 @@ int multi_partition=FALSE;
 int trash_bin=TRUE;
 char device[NAME_MAX];
 char device_mnt_dir[NAME_MAX];
-const char *argp_program_version = "giis-ext4 1.3 (17-12-2013) ";
+const char *argp_program_version = "giis-ext4 2.0 (29-03-2016) ";
 const char *argp_program_bug_address = "<http://groups.google.com/group/giis-users>";
 
 
