@@ -32,7 +32,7 @@
 
 /* SQL statements used in this program */
 #define SQL_STMT_GET_ALL "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable "
-#define SQL_STMT_GET_ALL_FILES "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where ftype=1 and mntedon=?"
+#define SQL_STMT_GET_ALL_FILES "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where ftype=1 and is_recovered=0 and mntedon=?"
 #define SQL_STMT_GET_USR "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where owner=?  "
 #define SQL_STMT_GET_FTYPE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where name like ? "
 #define SQL_STMT_GET_FILE "select name,inode,ext1,blk1,ext2,blk2,ext3,blk3,ext4,blk4,fsize,fpath,mode,owner,gid,md5sum,mntedon,is_deleted,is_recovered from giistable where name=?  "
