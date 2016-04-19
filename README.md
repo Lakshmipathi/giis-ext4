@@ -50,10 +50,10 @@ For more screencasting/manuals,checkout  www.giis.co.in
 
 ### Magazine references:
 
-Linux For You (India/2008): http://www.giis.co.in/LFY.png
-Linux Format (England/2011) : http://giis.co.in/giis_LXF.jpg
-c't(Germany/2014) : http://giis.co.in/ct_pg1_Jan_2014.jpg
-c't : http://giis.co.in/ct_pg2_Jan_2014.jpg
+- Linux For You (India/2008): http://www.giis.co.in/LFY.png
+- Linux Format (England/2011) : http://giis.co.in/giis_LXF.jpg
+- c't(Germany/2014) : http://giis.co.in/ct_pg1_Jan_2014.jpg
+- c't : http://giis.co.in/ct_pg2_Jan_2014.jpg
 
 
 You can get me at  <lakshmipathi.g@giis.co.in>
