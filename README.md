@@ -1,5 +1,5 @@
-				# gET iT i sAY. giis for ext4 (giis-ext4)
-				   version.2.0
+gET iT i sAY. giis for ext4 (giis-ext4)
+[![build status](https://travis-ci.org/Lakshmipathi/giis-ext4.svg?branch=master)](https://travis-ci.org/Lakshmipathi/giis-ext4) 
 	
 +About giis
 
