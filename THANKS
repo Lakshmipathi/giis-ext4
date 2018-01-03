@@ -1,13 +1,15 @@
-Additional contributors to giis-ext4.
+List of additional contributors to giis-ext4.
 
-Thanks to:
-	* Raghvendra Yadav <raghavmnnit@gmail.com> for patch for parse mtab cleanly.
-
-	* Tony Su <tonysu@su-networking.com> for helping to resolve issues in OpenSUSE.
+Thanks:
 
 	* Elija (http://www.thefifthcontinent) for alpha-testingi,bug reports/test cases and preparing  INSTALL file for Ubuntu/Fedora users.
 	  You can reach him at elija@thefifthcontinent.com
 
 	* Christian Kujau <lists@nerdbynature.de> for the Makefile
 
+	* Tony Su <tonysu@su-networking.com> for helping to resolve issues in OpenSUSE.
+
 	* Toni <toni@links2linux.de>  For patching to make src to compile with gcc-4.3 and gcc-4.4.
+
+	* Raghvendra Yadav <raghavmnnit@gmail.com> for patch for parse mtab cleanly.
+
